@@ -5,7 +5,7 @@ import { EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, amountUnitLabel, catS
 import { useStore } from "../store";
 import { amountLabel, buildShopping, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, uid } from "../utils";
 import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, useCountUp, useToast } from "./UI";
-import { IcBook, IcBriefcase, IcCart, IcChevronLeft, IcDoc, IcPencil, IcPlus, IcReset, IcRuble, IcSearch, IcUsers, IcX } from "./Icons";
+import { IcBook, IcBriefcase, IcCart, IcChevronLeft, IcComment, IcDoc, IcPencil, IcPlus, IcReset, IcRuble, IcSearch, IcUsers, IcX } from "./Icons";
 import { EventDocPreview } from "./PrintDocs";
 import { EventSheet } from "./EventsScreen";
 
@@ -16,7 +16,7 @@ export function EventDetail({ id, onBack }: { id: string; onBack: () => void }) 
   return <DetailInner ev={ev} onBack={onBack} />;
 }
 
-type TabId = "menu" | "client" | "services" | "docs";
+type TabId = "menu" | "client" | "services" | "docs" | "comment";
 
 function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
   const { state, saveEvent, deleteEvent } = useStore();
@@ -36,6 +36,7 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
     { id: "client", label: `Клиент · ${ev.clientItems?.length ?? 0}`, short: `Клиент · ${ev.clientItems?.length ?? 0}`, Icon: IcUsers },
     { id: "services", label: `Услуги и скидки · ${ev.services.length}`, short: `Услуги · ${ev.services.length}`, Icon: IcBriefcase },
     { id: "docs", label: "Документы", short: "Документы", Icon: IcDoc },
+    { id: "comment", label: "Комментарий", short: "Заметка", Icon: IcComment },
   ];
   return (
     <section className="px-5 pb-8 pt-5 md:px-8">
@@ -48,17 +49,6 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
         <button onClick={() => setEditOpen(true)} aria-label="Изменить мероприятие" className="tap flex items-center gap-1.5 rounded-[11px] border border-line px-2.5 py-2 text-[12px] font-semibold text-sage hover:text-cream sm:px-3"><IcPencil size={14} /> <span className="hidden sm:inline">Изменить</span></button>
         <DangerConfirm onConfirm={() => { deleteEvent(ev.id); toast("Мероприятие удалено", "del"); onBack(); }} />
       </div>
-      {ev.comment && (
-        <div className="reveal mx-0 mt-3 rounded-[14px] border border-glacier/30 bg-glacier/5 p-3.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 grow">
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-glacier">Комментарий</p>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-cream whitespace-pre-line">{ev.comment}</p>
-            </div>
-            <button onClick={() => setEditOpen(true)} className="tap shrink-0 rounded-[8px] border border-glacier/30 bg-glacier/10 px-2 py-1 text-[10px] font-semibold text-glacier hover:bg-glacier/20">Изменить</button>
-          </div>
-        </div>
-      )}
       <div className="reveal mx-0 mt-4 rounded-[18px] border border-saffron/25 p-4" style={{ background: "linear-gradient(135deg, rgba(244,168,58,0.15), rgba(244,168,58,0.03) 55%, rgba(126,217,176,0.08))" }}>
         <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-sage">Смета мероприятия</p>
         <p className="mt-1.5 font-display text-[30px] leading-none text-saffron">{fmtMoney(animGrand)}</p>
@@ -70,14 +60,6 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
           {(sum.dishDiscountSum > 0 || sum.eventDiscountSum > 0) && <span className="rounded-full border border-coral/30 bg-coral/10 px-2.5 py-1 font-semibold text-coral">скидки −{fmtMoney(sum.dishDiscountSum + sum.eventDiscountSum)}</span>}
         </div>
       </div>
-      {ev.comment && (
-        <div className="reveal mx-0 mt-3 rounded-[14px] border border-glacier/30 bg-glacier/5 p-3.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 grow"><p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-glacier">Комментарий</p><p className="mt-1.5 text-[12px] leading-relaxed text-cream whitespace-pre-line">{ev.comment}</p></div>
-            <button onClick={() => setEditOpen(true)} className="tap shrink-0 rounded-[8px] border border-glacier/30 bg-glacier/10 px-2 py-1 text-[10px] font-semibold text-glacier hover:bg-glacier/20">Изменить</button>
-          </div>
-        </div>
-      )}
       <div className="no-scrollbar mt-5 flex gap-1 overflow-x-auto rounded-[13px] border border-line bg-pine-850 p-1">
         {TABS.map((t) => { const active = tab === t.id; return (<button key={t.id} onClick={() => setTab(t.id)} className={`tap relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 py-2 text-[12.5px] font-semibold transition-colors ${active ? "bg-pine-700 text-saffron" : "text-sage hover:text-cream"}`}><t.Icon size={15} /><span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.label}</span></button>); })}
       </div>
@@ -86,12 +68,75 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
         {tab === "client" && <ClientItemsTab ev={ev} />}
         {tab === "services" && <ServicesTab ev={ev} />}
         {tab === "docs" && <DocsTab ev={ev} onOpenDoc={setDocKind} />}
+        {tab === "comment" && <CommentTab ev={ev} />}
       </div>
       <EventSheet open={editOpen} onClose={() => setEditOpen(false)} editing={ev} />
       <AddDishPicker open={pickerOpen} onClose={() => setPickerOpen(false)} ev={ev} onAdd={(recipeId) => { saveEvent({ ...ev, dishes: [...ev.dishes, { recipeId, portions: Math.max(1, ev.guests), overrides: null, discount: 0 }] }); setPickerOpen(false); toast("Блюдо добавлено в меню"); }} />
       <IngredientEditor key={editDishId ?? "none"} ev={ev} recipeId={editDishId} onClose={() => setEditDishId(null)} />
       {docKind && <EventDocPreview kind={docKind} event={ev} onClose={() => setDocKind(null)} />}
     </section>
+  );
+}
+
+function CommentTab({ ev }: { ev: EventPlan }) {
+  const { saveEvent } = useStore();
+  const toast = useToast();
+  const [comment, setComment] = useState(ev.comment ?? "");
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    saveEvent({ ...ev, comment: comment.trim() || undefined });
+    setSaved(true);
+    toast("Комментарий сохранён");
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const hasChanges = comment !== (ev.comment ?? "");
+
+  return (
+    <div className="space-y-5">
+      <div className="reveal rounded-[16px] border border-glacier/30 bg-glacier/5 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 font-display text-[15px]">
+              <IcComment size={16} className="text-glacier" /> Комментарий к мероприятию
+            </h3>
+            <p className="mt-1 text-[11.5px] text-sage">
+              Только для внутреннего использования, не отображается в печатных документах
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Предпочтения клиента, особенности мероприятия, важные заметки..."
+            rows={8}
+            className={inputCls + " resize-none leading-relaxed"}
+          />
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges}
+            className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-5 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 transition-opacity hover:shadow-saffron/40 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+          >
+            {saved ? "✓ Сохранено" : "Сохранить комментарий"}
+          </button>
+          {hasChanges && (
+            <span className="text-[12px] text-sage">Есть несохранённые изменения</span>
+          )}
+        </div>
+      </div>
+      {ev.comment && (
+        <div className="reveal rounded-[14px] border border-line bg-pine-800/50 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-sage">Подсказка</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-sage">
+            Комментарий виден только в приложении. Для информации, которая должна быть в печатных документах, используйте описание блюд или тех. карту в рецептах.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

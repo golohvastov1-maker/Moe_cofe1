@@ -49,7 +49,7 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
                   <span className={`grid h-[22px] w-[22px] place-items-center rounded-[7px] border transition-all ${isSel ? "anim-pop border-saffron bg-saffron text-pine-950" : "border-pine-500 text-transparent hover:border-saffron/60"}`}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
                 </button>
                 <div className="grid h-[46px] w-[52px] place-items-center rounded-[11px] border border-line bg-pine-800 text-center"><div><p className="font-display text-[15px] leading-none text-saffron">{day}</p><p className="mt-0.5 text-[8.5px] font-bold uppercase tracking-wide text-sage">{mon}</p></div></div>
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{e.name}</p><span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.05em]" style={{ color: st.fg, background: st.bg }}>{e.type}</span>{e.comment && <span className="inline-flex shrink-0 items-center rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">есть заметка</span>}</div><p className="mt-0.5 text-[11px] text-sage">{fmtDateShort(e.date)} · {daysUntilLabel(e.date)} · {e.dishes.length} {plural(e.dishes.length, ["блюдо", "блюда", "блюд"])}<span className="md:hidden"> · {e.guests} {plural(e.guests, ["гость", "гостя", "гостей"])} · {e.tablesCount} {plural(e.tablesCount, ["стол", "стола", "столов"])}</span></p>{e.comment && <p className="mt-1 truncate text-[10.5px] text-glacier/80">{e.comment}</p>}</div>
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{e.name}</p><span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.05em]" style={{ color: st.fg, background: st.bg }}>{e.type}</span></div><p className="mt-0.5 text-[11px] text-sage">{fmtDateShort(e.date)} · {daysUntilLabel(e.date)} · {e.dishes.length} {plural(e.dishes.length, ["блюдо", "блюда", "блюд"])}<span className="md:hidden"> · {e.guests} {plural(e.guests, ["гость", "гостя", "гостей"])} · {e.tablesCount} {plural(e.tablesCount, ["стол", "стола", "столов"])}</span></p></div>
                 <div className="hidden text-right md:block"><p className="font-display text-[14px] text-cream">{e.guests}</p></div>
                 <div className="text-right"><p className="font-display text-[15px] font-bold leading-tight text-saffron">{fmtMoney(sum.grand)}</p><p className="hidden text-[10px] text-sage md:block">≈ {fmtMoney(sum.perGuest)}/гостя</p></div>
                 <div className="hidden md:flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100" onClick={(ev) => ev.stopPropagation()}><DangerConfirm onConfirm={() => { deleteEvent(e.id); toast("Мероприятие удалено", "del"); }} /></div>
@@ -80,7 +80,6 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
   const [guests, setGuests] = useState(20);
   const [guestsPerTable, setGuestsPerTable] = useState(6);
   const [tablesCount, setTablesCount] = useState(4);
-  const [comment, setComment] = useState("");
   useEffect(() => {
     if (open) {
       setName(editing?.name ?? ""); setType(editing?.type ?? "Торжество");
@@ -88,13 +87,12 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
       const defaultGPT = (editing?.type ?? "Торжество") === "Торжество" ? 6 : 8;
       setGuestsPerTable(editing?.guestsPerTable ?? defaultGPT);
       setTablesCount(editing?.tablesCount ?? Math.ceil((editing?.guests ?? 20) / defaultGPT));
-      setComment(editing?.comment ?? "");
     }
   }, [open, editing]);
   const valid = name.trim().length > 0 && date !== "";
   const save = () => {
     if (!valid) return;
-    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes: editing?.dishes ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], comment: comment.trim() || undefined });
+    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes: editing?.dishes ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], comment: editing?.comment });
     toast(editing ? "Мероприятие обновлено" : "Мероприятие создано"); onClose();
   };
   return (
@@ -109,7 +107,6 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
         <Field label="Тип мероприятия"><div className="grid grid-cols-2 gap-2">{EVENT_TYPES.map((t) => { const st = EVENT_TYPE_STYLE[t]; const active = t === type; return (<button key={t} onClick={() => { setType(t); const gpt = t === "Торжество" ? 6 : 8; setGuestsPerTable(gpt); setTablesCount(Math.ceil(guests / gpt)); }} className="tap rounded-[12px] border py-3 text-[13px] font-semibold transition-colors" style={active ? { borderColor: st.fg, background: st.bg, color: st.fg } : { borderColor: "var(--color-line)", color: "var(--color-sage)" }}>{t}</button>); })}</div></Field>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Дата"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls + " font-display text-[13px]"} /></Field><Field label="Гостей"><Stepper value={guests} onChange={(v) => { setGuests(v); setTablesCount(Math.ceil(v / guestsPerTable)); }} min={1} /></Field></div>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Гостей за столом"><Stepper value={guestsPerTable} onChange={(v) => { setGuestsPerTable(v); setTablesCount(Math.ceil(guests / v)); }} min={1} /></Field><Field label="Столов"><Stepper value={tablesCount} onChange={setTablesCount} min={1} /></Field></div>
-        <Field label="Комментарий" hint="Только для приложения, не отображается в документах"><textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Предпочтения клиента, особенности…" rows={3} className={inputCls + " resize-none"} /></Field>
       </div>
     </Modal>
   );
