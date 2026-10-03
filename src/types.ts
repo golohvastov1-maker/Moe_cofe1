@@ -151,6 +151,7 @@ export interface Recipe {
   markupMode: MarkupMode;
   markupValue: number;
   ingredients: IngredientRow[];
+  hideFromPriceList?: boolean;
 }
 
 export interface Service {

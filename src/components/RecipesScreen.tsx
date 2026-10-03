@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Category, CategoryInfo, MarkupMode, Product, Recipe, ServingStyle } from "../types";
-import { SERVING_LABEL, amountUnitLabel, catStyle } from "../types";
+import { SERVING_LABEL, amountUnitLabel, catStyle, isWeighed } from "../types";
 import { useStore } from "../store";
-import { downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, recipeCost, recipeFinalPerPortion, recipeFinalTotal, recipePerPortion, recipeTotalWeight, round2, uid } from "../utils";
+import { amountLabel, downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, recipeCost, recipeFinalPerPortion, recipeFinalTotal, recipePerPortion, recipeTotalWeight, round2, uid } from "../utils";
 import { AmountEditor, DangerConfirm, EmptyState, Field, Modal, Segmented, ServingBadge, Stepper, inputCls, selectCls, textareaCls, useToast } from "./UI";
 import { IcDownload, IcHat, IcPlate, IcPlus, IcPrinter, IcSearch, IcTable, IcX } from "./Icons";
 import { CategoriesManager } from "./Screens";
@@ -22,6 +22,7 @@ export function RecipesScreen() {
   const [cat, setCat] = useState<Category | "все">("все");
   const [priceOpen, setPriceOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [techCardPreview, setTechCardPreview] = useState<Recipe | null>(null);
   const filtered = useMemo(() => state.recipes.filter((r) => { const okQ = !q || r.name.toLowerCase().includes(q.trim().toLowerCase()); const okC = cat === "все" || r.category === cat; return okQ && okC; }), [state.recipes, q, cat]);
   const exportCsv = () => {
     const esc = (s: string) => (s.includes(";") ? `"${s}"` : s);
@@ -65,7 +66,7 @@ export function RecipesScreen() {
                     return (
                       <div key={r.id} role="button" tabIndex={0} onClick={() => { setEditing(r); setOpen(true); }} className={`reveal group flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-pine-800/70 ${i > 0 ? "border-t border-line/70" : ""}`}>
                         <div className="min-w-0 grow">
-                          <div className="flex items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{r.name}</p><ServingBadge serving={r.serving} /></div>
+                          <div className="flex items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{r.name}</p><ServingBadge serving={r.serving} />{r.hideFromPriceList && <span className="shrink-0 rounded-full border border-coral/30 bg-coral/10 px-2 py-0.5 text-[9px] font-bold uppercase text-coral">скрыто из прайса</span>}</div>
                           <p className="mt-0.5 truncate text-[11.5px] text-sage">выход {r.servingWeight} г · общий вес {fmtNum(recipeTotalWeight(r, state.products))} г · {r.portions} чел-к · {r.ingredients.length} ингр.{inEvents > 0 && ` · в ${inEvents} событ.`}</p>
                         </div>
                         <div className="hidden shrink-0 text-right sm:block">
@@ -77,7 +78,10 @@ export function RecipesScreen() {
                           <p className="font-display text-[13px] leading-tight text-mint">{fmtMoney(recipeFinalTotal(r, state.products))}</p>
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-sage">блюдо</p>
                         </div>
-                        <div className="shrink-0 opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}><DangerConfirm onConfirm={() => { deleteRecipe(r.id); toast("Рецепт удалён", "del"); }} /></div>
+                        <div className="flex shrink-0 items-center gap-1 opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => setTechCardPreview(r)} aria-label="Печать тех.карты" className="tap grid h-8 w-8 place-items-center rounded-[10px] border border-line text-sage hover:border-mint/50 hover:text-mint" title="Печать тех.карты"><IcPrinter size={14} /></button>
+                          <DangerConfirm onConfirm={() => { deleteRecipe(r.id); toast("Рецепт удалён", "del"); }} />
+                        </div>
                       </div>
                     );
                   })}
@@ -87,16 +91,17 @@ export function RecipesScreen() {
           })}
         </div>
       )}
-      <RecipeSheet open={open} onClose={() => setOpen(false)} editing={editing} />
+      <RecipeSheet open={open} onClose={() => setOpen(false)} editing={editing} onPreviewTechCard={setTechCardPreview} />
       <RecipesPricePreview open={priceOpen} onClose={() => setPriceOpen(false)} />
       <CategoriesManager open={categoriesOpen} onClose={() => setCategoriesOpen(false)} />
+      {techCardPreview && <TechCardPreview recipe={techCardPreview} onClose={() => setTechCardPreview(null)} />}
     </section>
   );
 }
 
 interface RowDraft { productId: string; amount: number; }
 
-function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () => void; editing: Recipe | null }) {
+function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: boolean; onClose: () => void; editing: Recipe | null; onPreviewTechCard: (recipe: Recipe) => void }) {
   const { state, saveRecipe, deleteRecipe } = useStore();
   const toast = useToast();
   const [name, setName] = useState("");
@@ -111,6 +116,7 @@ function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () =>
   const [rows, setRows] = useState<RowDraft[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickQ, setPickQ] = useState("");
+  const [hideFromPriceList, setHideFromPriceList] = useState(false);
   useEffect(() => {
     if (open) {
       setName(editing?.name ?? ""); setCategory(editing?.category ?? "Горячие блюда");
@@ -120,12 +126,13 @@ function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () =>
       setMarkupMode(editing?.markupMode ?? "percent");
       setMarkupValueStr(editing ? String(editing.markupValue).replace(".", ",") : "60");
       setRows((editing?.ingredients ?? []).map((i) => ({ productId: i.productId, amount: i.amount })));
+      setHideFromPriceList(editing?.hideFromPriceList ?? false);
       setPickQ("");
     }
   }, [open, editing]);
   const parsed = rows.filter((r) => r.amount > 0);
   const markupValue = parseNum(markupValueStr);
-  const draft: Recipe = { id: editing?.id ?? "draft", name, category, description, techNote, serving, portions, servingWeight: parseNum(servingWeight), markupMode, markupValue, ingredients: parsed };
+  const draft: Recipe = { id: editing?.id ?? "draft", name, category, description, techNote, serving, portions, servingWeight: parseNum(servingWeight), markupMode, markupValue, hideFromPriceList, ingredients: parsed };
   const total = recipeCost(draft, state.products);
   const pp = portions > 0 ? total / portions : 0;
   const pricePer = markupMode === "fixed" ? (portions > 0 ? markupValue / portions : 0) : pp * (1 + markupValue / 100);
@@ -135,7 +142,7 @@ function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () =>
   const addRow = (productId: string) => { const p = state.products.find((x) => x.id === productId); if (!p) return; const def = p.unit === "кг" ? 500 : p.unit === "л" ? 200 : 1; setRows((rs) => [...rs, { productId, amount: def }]); setPickerOpen(false); };
   const save = () => {
     if (!valid) return;
-    saveRecipe({ id: editing?.id ?? uid(), name: name.trim(), category, description: description.trim(), techNote: techNote.trim(), serving, portions, servingWeight: Math.max(1, parseNum(servingWeight)), markupMode, markupValue: round2(markupValue), ingredients: parsed.map((p) => ({ productId: p.productId, amount: round2(p.amount) })) });
+    saveRecipe({ id: editing?.id ?? uid(), name: name.trim(), category, description: description.trim(), techNote: techNote.trim(), serving, portions, servingWeight: Math.max(1, parseNum(servingWeight)), markupMode, markupValue: round2(markupValue), hideFromPriceList, ingredients: parsed.map((p) => ({ productId: p.productId, amount: round2(p.amount) })) });
     toast(editing ? "Рецепт сохранён" : "Рецепт добавлен"); onClose();
   };
   const pickerList = state.products.filter((p) => p.name.toLowerCase().includes(pickQ.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, "ru"));
@@ -152,6 +159,7 @@ function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () =>
           </div>
           <div className="flex items-center gap-3">
             {editing && <DangerConfirm hint="удалить?" onConfirm={() => { deleteRecipe(editing.id); toast("Рецепт удалён", "del"); onClose(); }} />}
+            {editing && <button onClick={() => { onPreviewTechCard(editing); }} aria-label="Печать тех.карты" className="tap grid h-9 w-9 shrink-0 place-items-center rounded-[11px] border border-line text-sage hover:border-mint/50 hover:text-mint" title="Печать тех.карты"><IcPrinter size={16} /></button>}
             <button onClick={onClose} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage hover:text-cream">Отмена</button>
             <button onClick={save} disabled={!valid} className="tap grow rounded-[14px] bg-saffron py-3 font-display text-[13px] font-bold text-pine-950 disabled:opacity-35">Сохранить</button>
           </div>
@@ -179,6 +187,10 @@ function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () =>
               <div className="relative w-[130px]"><input value={markupValueStr} onChange={(e) => setMarkupValueStr(e.target.value)} inputMode="decimal" placeholder="0" className={inputCls + " pr-9 py-2 text-right font-display font-semibold"} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-saffron">{markupMode === "percent" ? "%" : "₽"}</span></div>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="hideFromPriceList" checked={hideFromPriceList} onChange={(e) => setHideFromPriceList(e.target.checked)} className="h-4 w-4 rounded border-line bg-pine-800 accent-saffron" />
+            <label htmlFor="hideFromPriceList" className="text-[12px] text-sage cursor-pointer">Не показывать в прайс-листе</label>
+          </div>
           <div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-sage">Ингредиенты · {rows.length}</p>
             {rows.length === 0 && <p className="rounded-[12px] border border-dashed border-pine-500/70 px-4 py-4 text-center text-[12.5px] text-sage">Состав пуст</p>}
@@ -197,5 +209,90 @@ function RecipeSheet({ open, onClose, editing }: { open: boolean; onClose: () =>
         </div>
       </Modal>
     </>
+  );
+}
+
+function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
+  const { state } = useStore();
+  const totalWeight = recipeTotalWeight(recipe, state.products);
+  const costPer = recipePerPortion(recipe, state.products);
+  const pricePer = recipeFinalPerPortion(recipe, state.products);
+  
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#04100c]/97 backdrop-blur-md">
+      <div className="w-full max-w-[800px] max-h-[90vh] overflow-y-auto rounded-[16px] border border-line bg-pine-900 shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-pine-900 px-6 py-4">
+          <h2 className="font-display text-[18px] text-cream">Тех. карта: {recipe.name}</h2>
+          <button onClick={onClose} className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream"><IcX size={16} /></button>
+        </div>
+        <div className="p-6" style={{ background: "#fefdfb", color: "#2d2420" }}>
+          <div className="mb-6 border-b-2 pb-4" style={{ borderColor: "#3d3530" }}>
+            <h1 className="font-display text-[24px] leading-tight">{recipe.name}</h1>
+            <p className="mt-2 text-[12px]" style={{ color: "#8a7f75" }}>
+              Категория: {recipe.category} · Выход: {recipe.servingWeight} г · Рассчитано на {recipe.portions} чел.
+            </p>
+            {recipe.description && <p className="mt-2 text-[11px] italic" style={{ color: "#8a7f75" }}>{recipe.description}</p>}
+          </div>
+          
+          {recipe.techNote && (
+            <div className="mb-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#d4a017" }}>Технология приготовления</p>
+              <p className="mt-2 text-[12px] leading-relaxed whitespace-pre-line">{recipe.techNote}</p>
+            </div>
+          )}
+          
+          <div className="mb-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#d4a017" }}>Ингредиенты</p>
+            <table className="mt-2 w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: "#8a7f75" }}>
+                  <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: "#e0d5c8" }}>Продукт</th>
+                  <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: "#e0d5c8" }}>На 1 чел.</th>
+                  <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: "#e0d5c8" }}>Всего</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recipe.ingredients.map((row, idx) => {
+                  const p = state.products.find((x) => x.id === row.productId);
+                  if (!p) return null;
+                  const perPerson = row.amount / recipe.portions;
+                  return (
+                    <tr key={row.productId} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                      <td className="border-b py-1.5 pr-2" style={{ borderColor: "#e0d5c8" }}>{p.name}</td>
+                      <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: "#e0d5c8" }}>
+                        {isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
+                      </td>
+                      <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: "#e0d5c8" }}>
+                        {isWeighed(p.unit) ? amountLabel(row.amount, p.unit) : pieceAmountLabel(p, row.amount)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4 border-t-2 pt-4" style={{ borderColor: "#3d3530" }}>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Общий вес</p>
+              <p className="mt-1 font-display text-[18px]">{fmtNum(totalWeight)} г</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Себестоимость порции</p>
+              <p className="mt-1 font-display text-[18px]">{fmtMoney(costPer)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Цена с чел-ка</p>
+              <p className="mt-1 font-display text-[18px]">{fmtMoney(pricePer)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="sticky bottom-0 border-t border-line bg-pine-900 px-6 py-4">
+          <button onClick={() => window.print()} className="tap flex items-center gap-2 rounded-[11px] bg-saffron px-4 py-2 font-display text-[12px] font-bold text-pine-950 hover:brightness-110">
+            <IcPrinter size={15} /> Печать / PDF
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

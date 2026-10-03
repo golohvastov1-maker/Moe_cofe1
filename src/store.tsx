@@ -35,6 +35,7 @@ function normalize(raw: Partial<AppState>): AppState {
           serving: r.serving ?? "per-person",
           markupMode: r.markupMode ?? "percent",
           markupValue: r.markupValue ?? (r as { markup?: number }).markup ?? 0,
+          hideFromPriceList: r.hideFromPriceList ?? false,
         }))
       : base.recipes,
     priceLog: Array.isArray(raw.priceLog) ? raw.priceLog : [],

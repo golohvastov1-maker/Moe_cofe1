@@ -713,7 +713,7 @@ function RecipesPriceDoc({ selectedCategories }: { selectedCategories: string[] 
       </div>
       {[...MENU_ORDER, ...state.categories.filter((c) => !MENU_ORDER.includes(c.name)).map((c) => c.name)].map((cat) => {
         if (!selectedCategories.includes(cat)) return null;
-        const group = state.recipes.filter((r) => r.category === cat).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+        const group = state.recipes.filter((r) => r.category === cat && !r.hideFromPriceList).sort((a, b) => a.name.localeCompare(b.name, "ru"));
         if (group.length === 0) return null;
         return (
           <div key={cat} className="mt-6">
