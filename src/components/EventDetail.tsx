@@ -48,6 +48,17 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
         <button onClick={() => setEditOpen(true)} aria-label="Изменить мероприятие" className="tap flex items-center gap-1.5 rounded-[11px] border border-line px-2.5 py-2 text-[12px] font-semibold text-sage hover:text-cream sm:px-3"><IcPencil size={14} /> <span className="hidden sm:inline">Изменить</span></button>
         <DangerConfirm onConfirm={() => { deleteEvent(ev.id); toast("Мероприятие удалено", "del"); onBack(); }} />
       </div>
+      {ev.comment && (
+        <div className="reveal mx-0 mt-3 rounded-[14px] border border-glacier/30 bg-glacier/5 p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 grow">
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-glacier">Комментарий</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-cream whitespace-pre-line">{ev.comment}</p>
+            </div>
+            <button onClick={() => setEditOpen(true)} className="tap shrink-0 rounded-[8px] border border-glacier/30 bg-glacier/10 px-2 py-1 text-[10px] font-semibold text-glacier hover:bg-glacier/20">Изменить</button>
+          </div>
+        </div>
+      )}
       <div className="reveal mx-0 mt-4 rounded-[18px] border border-saffron/25 p-4" style={{ background: "linear-gradient(135deg, rgba(244,168,58,0.15), rgba(244,168,58,0.03) 55%, rgba(126,217,176,0.08))" }}>
         <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-sage">Смета мероприятия</p>
         <p className="mt-1.5 font-display text-[30px] leading-none text-saffron">{fmtMoney(animGrand)}</p>
