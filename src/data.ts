@@ -257,7 +257,7 @@ export const seedState: AppState = {
       tablesCount: 10,
       discount: 5,
       dishes: [
-        { recipeId: "r01", portions: 60, discount: 0, overrides: null },
+        { recipeId: "r01", portions: 60, discount: 0, overrides: null, comment: "Подавать горячим, украсить зеленью" },
         {
           recipeId: "r04", portions: 60, discount: 0,
           overrides: [
@@ -266,6 +266,7 @@ export const seedState: AppState = {
             { productId: "p11", amount: 700 }, { productId: "p13", amount: 2 },
             { productId: "p14", amount: 400 }, { productId: "p26", amount: 2 },
           ],
+          comment: "Для вегетарианцев не добавлять курицу",
         },
         { recipeId: "r07", portions: 40, discount: 0, overrides: null },
         { recipeId: "r10", portions: 70, discount: 0, overrides: null },

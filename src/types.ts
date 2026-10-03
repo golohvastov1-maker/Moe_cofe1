@@ -165,6 +165,7 @@ export interface EventDish {
   portions: number;
   discount: number;
   overrides: IngredientRow[] | null;
+  comment?: string;
 }
 
 export interface EventService {

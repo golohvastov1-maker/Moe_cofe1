@@ -102,6 +102,11 @@ function ChefDoc({ ev }: { ev: EventPlan }) {
                     })}
                   </tbody>
                 </table>
+                {d.dish.comment && (
+                  <p className="mt-2 border-l-2 py-0.5 pl-2.5 text-[10.5px] italic leading-relaxed" style={{ borderColor: "#b3541e", color: SOFT }}>
+                    * {d.dish.comment}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -400,6 +405,9 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
               wsData.push(["", p.name, isWeighed(p.unit) ? amountLabel(total, p.unit) : pieceAmountLabel(p, total)]);
             }
           });
+          if (d.dish.comment) {
+            wsData.push(["", `* ${d.dish.comment}`]);
+          }
           wsData.push([]);
         });
       });

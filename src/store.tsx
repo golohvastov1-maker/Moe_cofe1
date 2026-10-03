@@ -51,7 +51,7 @@ function normalize(raw: Partial<AppState>): AppState {
             bought: e.bought ?? [],
             inStock: e.inStock ?? [],
             comment: e.comment ?? "",
-            dishes: (e.dishes ?? []).map((d) => ({ ...d, discount: d.discount ?? 0 })),
+            dishes: (e.dishes ?? []).map((d) => ({ ...d, discount: d.discount ?? 0, comment: d.comment ?? "" })),
           };
         })
       : base.events,

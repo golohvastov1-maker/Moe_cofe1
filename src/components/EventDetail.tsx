@@ -4,7 +4,7 @@ import type { Category, DocKind, EventPlan, IngredientRow } from "../types";
 import { EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, amountUnitLabel, catStyle, isPieceUnit } from "../types";
 import { useStore } from "../store";
 import { amountLabel, buildShopping, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, uid } from "../utils";
-import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, useCountUp, useToast } from "./UI";
+import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, textareaCls, useCountUp, useToast } from "./UI";
 import { IcBook, IcBriefcase, IcCart, IcChevronLeft, IcComment, IcDoc, IcPencil, IcPlus, IcReset, IcRuble, IcSearch, IcUsers, IcX } from "./Icons";
 import { EventDocPreview } from "./PrintDocs";
 import { EventSheet } from "./EventsScreen";
@@ -181,8 +181,9 @@ function MenuTab({ ev, onAdd, onEditDish, sortBy, setSortBy }: { ev: EventPlan; 
                     <div key={d.recipe.id} className="reveal rounded-[14px] border border-line bg-pine-800 p-3.5" style={{ animationDelay: `${Math.min(i * 40, 300)}ms` }}>
                       <div className="flex items-center gap-2">
                         <div className="min-w-0 grow">
-                          <div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{d.recipe.name}</p><ServingBadge serving={d.recipe.serving} />{d.overridden && <span className="shrink-0 rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">состав изменён</span>}</div>
+                          <div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{d.recipe.name}</p><ServingBadge serving={d.recipe.serving} />{d.overridden && <span className="shrink-0 rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">состав изменён</span>}{d.dish.comment && <span className="shrink-0 rounded-full border border-saffron/30 bg-saffron/10 px-2 py-0.5 text-[9px] font-bold uppercase text-saffron">есть комментарий</span>}</div>
                           <p className="mt-0.5 text-[11px] text-sage">{fmtMoney(basePer)} с чел-ка · выход {d.recipe.servingWeight} г{disc > 0 && <span className="text-coral"> · скидка −{disc}%</span>}</p>
+                          {d.dish.comment && <p className="mt-1 truncate text-[10.5px] text-saffron/80">* {d.dish.comment}</p>}
                         </div>
                         <button onClick={() => onEditDish(d.recipe.id)} className="tap shrink-0 rounded-[10px] border border-line px-2.5 py-1.5 text-[11px] font-semibold text-sage hover:border-glacier/40 hover:text-glacier">Состав</button>
                         <button onClick={() => removeDish(d.recipe.id)} aria-label="Убрать блюдо" className="tap grid h-7 w-7 shrink-0 place-items-center rounded-full text-sage hover:text-coral"><IcX size={14} /></button>
@@ -229,6 +230,7 @@ function IngredientEditor({ ev, recipeId, onClose }: { ev: EventPlan; recipeId: 
   const recipe = state.recipes.find((r) => r.id === recipeId);
   const [rows, setRows] = useState<IngredientRow[] | null>(null);
   const [swapFor, setSwapFor] = useState<string | null>(null);
+  const [comment, setComment] = useState(dish?.comment ?? "");
   if (!dish || !recipe) return null;
   const current: IngredientRow[] = rows ?? dish.overrides ?? recipe.ingredients;
   const overridden = rows !== null || dish.overrides !== null;
@@ -236,7 +238,7 @@ function IngredientEditor({ ev, recipeId, onClose }: { ev: EventPlan; recipeId: 
   const setRow = (idx: number, patch: Partial<IngredientRow>) => setRows(current.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   const removeRow = (idx: number) => setRows(current.filter((_, i) => i !== idx));
   const swap = (oldId: string, newId: string) => { setRows(current.map((r) => (r.productId === oldId ? { ...r, productId: newId } : r))); setSwapFor(null); };
-  const save = () => { saveEvent({ ...ev, dishes: ev.dishes.map((d) => (d.recipeId === recipe.id ? { ...d, overrides: rows ?? d.overrides } : d)) }); toast("Состав блюда сохранён для этого мероприятия"); onClose(); };
+  const save = () => { saveEvent({ ...ev, dishes: ev.dishes.map((d) => (d.recipeId === recipe.id ? { ...d, overrides: rows ?? d.overrides, comment: comment.trim() || undefined } : d)) }); toast("Состав блюда сохранён для этого мероприятия"); onClose(); };
   const resetToMaster = () => { saveEvent({ ...ev, dishes: ev.dishes.map((d) => (d.recipeId === recipe.id ? { ...d, overrides: null } : d)) }); setRows(null); toast("Возвращён эталонный состав рецепта", "info"); onClose(); };
   return (
     <>
@@ -251,6 +253,17 @@ function IngredientEditor({ ev, recipeId, onClose }: { ev: EventPlan; recipeId: 
         <div className="space-y-2">
           {current.map((row, i) => { const p = state.products.find((x) => x.id === row.productId); if (!p) return null; return (<div key={row.productId + i} className={`rounded-[13px] border bg-pine-700/70 p-3 ${row.clientProvided ? "border-glacier/40" : "border-line"}`}><div className="flex items-center justify-between gap-2"><p className="min-w-0 truncate text-[13.5px] font-semibold text-cream">{p.name}{row.clientProvided && <span className="ml-2 rounded-full bg-glacier/20 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">клиент</span>}</p><div className="flex shrink-0 items-center gap-1"><button onClick={() => setSwapFor(row.productId)} className="tap rounded-[9px] border border-line px-2 py-1 text-[10.5px] font-semibold text-sage hover:border-saffron/40 hover:text-saffron">заменить</button><button onClick={() => removeRow(i)} aria-label="Убрать" className="tap grid h-6 w-6 place-items-center rounded-full text-sage hover:text-coral"><IcX size={13} /></button></div></div><div className="mt-2 flex flex-wrap items-center gap-2"><AmountEditor product={p} value={row.amount} onChange={(v) => setRow(i, { amount: v })} /><span className="ml-auto whitespace-nowrap font-display text-[13px] font-semibold text-saffron">{fmtMoney(ingredientCost(row, state.products))}</span></div><div className="mt-2 flex items-center gap-2"><label className="flex cursor-pointer items-center gap-2 text-[11px] text-sage"><input type="checkbox" checked={row.clientProvided ?? false} onChange={(e) => setRow(i, { clientProvided: e.target.checked })} className="h-4 w-4 rounded border-line bg-pine-800 accent-glacier" />Привозит/готовит клиент</label></div></div>); })}
           {current.length === 0 && <p className="rounded-[12px] border border-dashed border-pine-500/70 px-4 py-4 text-center text-[12.5px] text-sage">Состав пуст</p>}
+        </div>
+        <div className="mt-4">
+          <Field label="Комментарий к блюду" hint="Будет отображаться в задании для повара">
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Например: подать горячим, украсить зеленью..."
+              rows={3}
+              className={textareaCls}
+            />
+          </Field>
         </div>
       </Modal>
       {swapFor && (<Modal open onClose={() => setSwapFor(null)} title="Заменить продукт" subtitle="Выберите продукт из базы"><div className="space-y-2 pb-2">{state.products.filter((p) => p.id !== swapFor).sort((a, b) => a.name.localeCompare(b.name, "ru")).map((p) => (<button key={p.id} onClick={() => swap(swapFor, p.id)} className="tap flex w-full items-center gap-3 rounded-[12px] border border-line bg-pine-800 px-3.5 py-2.5 text-left hover:border-saffron/40"><span className="min-w-0 grow"><span className="block truncate text-[13.5px] font-semibold text-cream">{p.name}</span><span className="text-[11px] text-sage">{fmtMoney(p.price)} / {p.unit}</span></span><IcPlus size={15} className="shrink-0 text-saffron" /></button>))}</div></Modal>)}
