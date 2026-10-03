@@ -127,6 +127,11 @@ html, body {
     print-color-adjust: exact !important;
   }
   
+  /* Скрываем всё приложение, кроме документа */
+  body > div > *:not(.print-host),
+  .print-host > *:not(div),
+  .print-host > div > *:not(#print-root),
+  #print-root > *:not(.print-sheet),
   .no-print {
     display: none !important;
   }
@@ -136,6 +141,15 @@ html, body {
     color: black !important;
     overflow: visible !important;
     height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  body > div {
+    position: static !important;
+    background: white !important;
+    min-height: 0 !important;
+    display: block !important;
   }
   
   .print-host {
@@ -145,6 +159,17 @@ html, body {
     height: auto !important;
     width: 100% !important;
     inset: auto !important;
+    z-index: auto !important;
+    display: block !important;
+  }
+  
+  .print-host > div {
+    position: static !important;
+    background: white !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
   }
   
   #print-root {
@@ -174,6 +199,7 @@ html, body {
   .print-sheet > div {
     overflow: visible !important;
     height: auto !important;
+    background: white !important;
   }
   
   .print-sheet table {
