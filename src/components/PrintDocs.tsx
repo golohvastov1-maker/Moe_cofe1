@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { DocKind, EventPlan } from "../types";
-import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, SERVING_LABEL, amountUnitLabel, catStyle, isWeighed } from "../types";
+import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, SERVING_LABEL, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
 import { amountLabel, buildMultiShopping, buildShopping, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
 import { IcPrinter, IcX } from "./Icons";
@@ -199,7 +199,14 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
                             </div>
                           )}
                         </td>
-                        <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}</td>
+                        <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
+                          {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
+                          {!isWeighed(r.product.unit) && !isPieceUnit(r.product.unit) && r.product.netWeight && (
+                            <div className="text-[9px] font-normal" style={{ color: SOFT }}>
+                              общий вес: {(r.amount * r.product.netWeight) >= 1000 ? `${fmtNum((r.amount * r.product.netWeight) / 1000)} кг` : `${fmtNum(r.amount * r.product.netWeight)} г`}
+                            </div>
+                          )}
+                        </td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
                         <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.cost)}</td>
                         <td className="no-print border-b py-1.5 text-right" style={{ borderColor: RULE }}>
@@ -422,13 +429,15 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
       wsData.push(["Сводный список закупок"]);
       wsData.push([event.name, fmtDateLong(event.date)]);
       wsData.push([]);
-      wsData.push(["Продукт", "Категория", "Нужно", "Цена/ед.", "Сумма", "В блюдах"]);
+      wsData.push(["Продукт", "Категория", "Нужно", "Общий вес", "Цена/ед.", "Сумма", "В блюдах"]);
       
       rows.forEach((r) => {
+        const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
         wsData.push([
           r.product.name,
           r.product.category,
           isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount),
+          totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
           `${fmtMoney(r.product.price)}/${r.product.unit}`,
           fmtMoney(r.cost),
           r.usedInDishes ? r.usedInDishes.join(", ") : ""
@@ -437,7 +446,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
       
       const total = rows.reduce((s, r) => s + r.cost, 0);
       wsData.push([]);
-      wsData.push(["", "", "", "ИТОГО:", fmtMoney(total)]);
+      wsData.push(["", "", "", "", "", "ИТОГО:", fmtMoney(total)]);
     } else if (kind === "invoice") {
       const sum = eventSummary(event, state.recipes, state.products);
       wsData.push(["Счёт для клиента"]);
@@ -502,15 +511,17 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
       ["Общий список закупок"],
       [`Объединено ${events.length} ${plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])}`],
       [],
-      ["Продукт", "Категория", "Всего нужно", "Цена/ед.", "Сумма", "По мероприятиям"]
+      ["Продукт", "Категория", "Всего нужно", "Общий вес", "Цена/ед.", "Сумма", "По мероприятиям"]
     ];
     
     rows.forEach((r) => {
       const eventsList = r.perEvent.map((pe) => `${pe.eventName}: ${isWeighed(r.product.unit) ? amountLabel(pe.amount, r.product.unit) : pieceAmountLabel(r.product, pe.amount)}`).join("; ");
+      const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
       wsData.push([
         r.product.name,
         r.product.category,
         isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount),
+        totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
         `${fmtMoney(r.product.price)}/${r.product.unit}`,
         fmtMoney(r.cost),
         eventsList
@@ -519,7 +530,7 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
     
     const total = rows.reduce((s, r) => s + r.cost, 0);
     wsData.push([]);
-    wsData.push(["", "", "", "ИТОГО:", fmtMoney(total)]);
+    wsData.push(["", "", "", "", "", "ИТОГО:", fmtMoney(total)]);
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -591,7 +602,14 @@ function MultiShoppingDoc({ events }: { events: EventPlan[] }) {
                           {r.perEvent.map((pe) => `${pe.eventName}: ${isWeighed(r.product.unit) ? amountLabel(pe.amount, r.product.unit) : pieceAmountLabel(r.product, pe.amount)}`).join(" · ")}
                         </p>
                       </td>
-                      <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}</td>
+                      <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
+                        {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
+                        {!isWeighed(r.product.unit) && !isPieceUnit(r.product.unit) && r.product.netWeight && (
+                          <div className="text-[9px] font-normal" style={{ color: SOFT }}>
+                            общий вес: {(r.amount * r.product.netWeight) >= 1000 ? `${fmtNum((r.amount * r.product.netWeight) / 1000)} кг` : `${fmtNum(r.amount * r.product.netWeight)} г`}
+                          </div>
+                        )}
+                      </td>
                       <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
                       <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.cost)}</td>
                     </tr>
