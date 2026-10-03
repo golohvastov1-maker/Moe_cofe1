@@ -127,13 +127,69 @@ html, body {
     print-color-adjust: exact !important;
   }
   
-  /* Скрываем всё приложение, кроме документа */
-  body > div > *:not(.print-host),
-  .print-host > *:not(div),
-  .print-host > div > *:not(#print-root),
-  #print-root > *:not(.print-sheet),
+  /* Скрываем всё приложение, кроме print-host */
+  body > div {
+    display: none !important;
+  }
+  
+  body > div.print-host {
+    display: block !important;
+  }
+  
+  /* Скрываем элементы управления */
   .no-print {
     display: none !important;
+  }
+  
+  /* Показываем контейнер документа */
+  .print-host > div {
+    display: block !important;
+  }
+  
+  /* Показываем сам документ */
+  #print-root {
+    display: block !important;
+  }
+  
+  /* Показываем всё содержимое документа */
+  #print-root * {
+    display: initial !important;
+  }
+  
+  #print-root div {
+    display: block !important;
+  }
+  
+  #print-root span {
+    display: inline !important;
+  }
+  
+  #print-root table {
+    display: table !important;
+  }
+  
+  #print-root tr {
+    display: table-row !important;
+  }
+  
+  #print-root td,
+  #print-root th {
+    display: table-cell !important;
+  }
+  
+  #print-root thead {
+    display: table-header-group !important;
+  }
+  
+  #print-root tbody {
+    display: table-row-group !important;
+  }
+  
+  #print-root p,
+  #print-root h1,
+  #print-root h2,
+  #print-root h3 {
+    display: block !important;
   }
   
   html, body {
@@ -150,6 +206,7 @@ html, body {
     background: white !important;
     min-height: 0 !important;
     display: block !important;
+    visibility: visible !important;
   }
   
   .print-host {
@@ -161,6 +218,7 @@ html, body {
     inset: auto !important;
     z-index: auto !important;
     display: block !important;
+    visibility: visible !important;
   }
   
   .print-host > div {
@@ -170,6 +228,7 @@ html, body {
     margin: 0 !important;
     padding: 0 !important;
     display: block !important;
+    visibility: visible !important;
   }
   
   #print-root {
@@ -184,6 +243,7 @@ html, body {
     background: white !important;
     color: black !important;
     height: auto !important;
+    visibility: visible !important;
   }
   
   .print-sheet {
@@ -194,12 +254,14 @@ html, body {
     overflow: visible !important;
     height: auto !important;
     width: 100% !important;
+    visibility: visible !important;
   }
   
   .print-sheet > div {
     overflow: visible !important;
     height: auto !important;
     background: white !important;
+    visibility: visible !important;
   }
   
   .print-sheet table {
