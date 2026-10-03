@@ -117,12 +117,81 @@ html, body {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
   .no-print {
     display: none !important;
   }
   
-  body {
+  html, body {
     background: white !important;
     color: black !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  
+  .print-host {
+    position: static !important;
+    overflow: visible !important;
+    background: white !important;
+    height: auto !important;
+    width: 100% !important;
+    inset: auto !important;
+  }
+  
+  #print-root {
+    position: static !important;
+    overflow: visible !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+    color: black !important;
+    height: auto !important;
+  }
+  
+  .print-sheet {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+  
+  .print-sheet > div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  
+  .print-sheet table {
+    page-break-inside: auto;
+  }
+  
+  .print-sheet tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  .print-sheet thead {
+    display: table-header-group;
+  }
+  
+  .print-sheet h1,
+  .print-sheet h2,
+  .print-sheet h3 {
+    page-break-after: avoid;
   }
 }

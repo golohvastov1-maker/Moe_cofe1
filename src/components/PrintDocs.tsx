@@ -373,7 +373,7 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
 
 function PreviewShell({ title, subtitle, onClose, children, onExportExcel }: { title: string; subtitle: string; onClose: () => void; children: ReactNode; onExportExcel?: () => void }) {
   return (
-    <div className="print-host fixed inset-0 z-[80] overflow-y-auto bg-[#04100c]/97 scroll-thin">
+    <div className="print-host fixed inset-0 z-[80] overflow-y-auto bg-[#04100c]/97 scroll-thin print:static print:overflow-visible print:bg-white">
       <div className="no-print sticky top-0 z-10 border-b border-line bg-pine-900/95 backdrop-blur-md">
         <div className="mx-auto flex h-[54px] max-w-[860px] items-center gap-3 px-4">
           <button onClick={onClose} className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream" aria-label="Закрыть"><IcX size={16} /></button>
@@ -382,8 +382,8 @@ function PreviewShell({ title, subtitle, onClose, children, onExportExcel }: { t
           <button onClick={() => window.print()} className="tap flex items-center gap-2 rounded-[11px] bg-saffron px-3.5 py-2 font-display text-[11.5px] font-bold text-pine-950 hover:brightness-110"><IcPrinter size={15} /> Сохранить в PDF</button>
         </div>
       </div>
-      <div className="mx-auto max-w-[860px] px-3 py-6 md:px-6">
-        <div id="print-root" className="print-sheet overflow-hidden rounded-[6px] shadow-[0_30px_90px_rgba(0,0,0,0.6)]" style={{ fontFamily: "var(--font-body)", background: "#fefdfb", color: "#2d2420" }}>{children}</div>
+      <div className="mx-auto max-w-[860px] px-3 py-6 md:px-6 print:max-w-none print:px-0 print:py-0">
+        <div id="print-root" className="print-sheet overflow-hidden rounded-[6px] shadow-[0_30px_90px_rgba(0,0,0,0.6)] print:overflow-visible print:rounded-none print:shadow-none" style={{ fontFamily: "var(--font-body)", background: "#fefdfb", color: "#2d2420" }}>{children}</div>
         <p className="no-print mt-4 pb-4 text-center text-[11px] text-sage">Формат А4 · для PDF выберите «Сохранить как PDF» в диалоге печати</p>
       </div>
     </div>
