@@ -195,7 +195,7 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
                           {r.usedInDishes && r.usedInDishes.length > 0 && (
                             <div className="mt-1 text-[9px]" style={{ color: SOFT }}>
                               <span className="font-bold">В блюдах: </span>
-                              {r.usedInDishes.join(", ")}
+                              {r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ")}
                             </div>
                           )}
                         </td>
@@ -440,7 +440,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
           totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
           `${fmtMoney(r.product.price)}/${r.product.unit}`,
           fmtMoney(r.cost),
-          r.usedInDishes ? r.usedInDishes.join(", ") : ""
+          r.usedInDishes ? r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ") : ""
         ]);
       });
       
