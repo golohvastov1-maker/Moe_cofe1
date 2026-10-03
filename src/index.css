@@ -127,69 +127,32 @@ html, body {
     print-color-adjust: exact !important;
   }
   
-  /* Скрываем всё приложение, кроме print-host */
-  body > div {
+  /* Скрываем ВСЁ приложение */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Показываем print-host и всех его потомков */
+  .print-host,
+  .print-host * {
+    visibility: visible !important;
+  }
+  
+  /* Скрываем элементы управления внутри print-host */
+  .no-print,
+  .no-print * {
+    visibility: hidden !important;
     display: none !important;
   }
   
-  body > div.print-host {
-    display: block !important;
-  }
-  
-  /* Скрываем элементы управления */
-  .no-print {
-    display: none !important;
-  }
-  
-  /* Показываем контейнер документа */
-  .print-host > div {
-    display: block !important;
-  }
-  
-  /* Показываем сам документ */
-  #print-root {
-    display: block !important;
-  }
-  
-  /* Показываем всё содержимое документа */
-  #print-root * {
-    display: initial !important;
-  }
-  
-  #print-root div {
-    display: block !important;
-  }
-  
-  #print-root span {
-    display: inline !important;
-  }
-  
-  #print-root table {
-    display: table !important;
-  }
-  
-  #print-root tr {
-    display: table-row !important;
-  }
-  
-  #print-root td,
-  #print-root th {
-    display: table-cell !important;
-  }
-  
-  #print-root thead {
-    display: table-header-group !important;
-  }
-  
-  #print-root tbody {
-    display: table-row-group !important;
-  }
-  
-  #print-root p,
-  #print-root h1,
-  #print-root h2,
-  #print-root h3 {
-    display: block !important;
+  /* Позиционирование для печати */
+  .print-host {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+    background: white !important;
   }
   
   html, body {
@@ -201,49 +164,12 @@ html, body {
     padding: 0 !important;
   }
   
-  body > div {
-    position: static !important;
-    background: white !important;
-    min-height: 0 !important;
-    display: block !important;
-    visibility: visible !important;
-  }
-  
-  .print-host {
-    position: static !important;
-    overflow: visible !important;
-    background: white !important;
-    height: auto !important;
-    width: 100% !important;
-    inset: auto !important;
-    z-index: auto !important;
-    display: block !important;
-    visibility: visible !important;
-  }
-  
-  .print-host > div {
-    position: static !important;
-    background: white !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    display: block !important;
-    visibility: visible !important;
-  }
-  
   #print-root {
-    position: static !important;
-    overflow: visible !important;
-    max-width: none !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     background: white !important;
     color: black !important;
-    height: auto !important;
-    visibility: visible !important;
+    overflow: visible !important;
   }
   
   .print-sheet {
@@ -252,16 +178,6 @@ html, body {
     box-shadow: none !important;
     border-radius: 0 !important;
     overflow: visible !important;
-    height: auto !important;
-    width: 100% !important;
-    visibility: visible !important;
-  }
-  
-  .print-sheet > div {
-    overflow: visible !important;
-    height: auto !important;
-    background: white !important;
-    visibility: visible !important;
   }
   
   .print-sheet table {
