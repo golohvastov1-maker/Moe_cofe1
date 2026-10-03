@@ -231,6 +231,9 @@ function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => v
             <p className="mt-2 text-[12px]" style={{ color: "#8a7f75" }}>
               Категория: {recipe.category} · Выход: {recipe.servingWeight} г · Рассчитано на {recipe.portions} чел.
             </p>
+            <div className="mt-2">
+              <ServingBadge serving={recipe.serving} />
+            </div>
             {recipe.description && <p className="mt-2 text-[11px] italic" style={{ color: "#8a7f75" }}>{recipe.description}</p>}
           </div>
           

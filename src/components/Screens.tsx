@@ -13,7 +13,7 @@ export function ProductsScreen() {
   const [q, setQ] = useState("");
   const [catFilter, setCatFilter] = useState<ProductCategory | "все">("все");
   const [unitFilter, setUnitFilter] = useState<Unit | "все">("все");
-  const [sortMode, setSortMode] = useState<"abc" | "cat">("abc");
+  const [sortMode, setSortMode] = useState<"abc" | "cat">("cat");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);

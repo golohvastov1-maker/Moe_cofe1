@@ -201,11 +201,6 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
                           {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
-                          {!isWeighed(r.product.unit) && !isPieceUnit(r.product.unit) && r.product.netWeight && (
-                            <div className="text-[9px] font-normal" style={{ color: SOFT }}>
-                              общий вес: {(r.amount * r.product.netWeight) >= 1000 ? `${fmtNum((r.amount * r.product.netWeight) / 1000)} кг` : `${fmtNum(r.amount * r.product.netWeight)} г`}
-                            </div>
-                          )}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
                         <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.cost)}</td>
@@ -604,11 +599,6 @@ function MultiShoppingDoc({ events }: { events: EventPlan[] }) {
                       </td>
                       <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
                         {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
-                        {!isWeighed(r.product.unit) && !isPieceUnit(r.product.unit) && r.product.netWeight && (
-                          <div className="text-[9px] font-normal" style={{ color: SOFT }}>
-                            общий вес: {(r.amount * r.product.netWeight) >= 1000 ? `${fmtNum((r.amount * r.product.netWeight) / 1000)} кг` : `${fmtNum(r.amount * r.product.netWeight)} г`}
-                          </div>
-                        )}
                       </td>
                       <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
                       <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.cost)}</td>
