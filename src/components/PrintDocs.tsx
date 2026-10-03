@@ -192,6 +192,12 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
                               {r.clientNotes && <span className="ml-1 italic">({r.clientNotes})</span>}
                             </div>
                           )}
+                          {r.usedInDishes && r.usedInDishes.length > 0 && (
+                            <div className="mt-1 text-[9px]" style={{ color: SOFT }}>
+                              <span className="font-bold">В блюдах: </span>
+                              {r.usedInDishes.join(", ")}
+                            </div>
+                          )}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}</td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
@@ -416,7 +422,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
       wsData.push(["Сводный список закупок"]);
       wsData.push([event.name, fmtDateLong(event.date)]);
       wsData.push([]);
-      wsData.push(["Продукт", "Категория", "Нужно", "Цена/ед.", "Сумма"]);
+      wsData.push(["Продукт", "Категория", "Нужно", "Цена/ед.", "Сумма", "В блюдах"]);
       
       rows.forEach((r) => {
         wsData.push([
@@ -424,7 +430,8 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
           r.product.category,
           isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount),
           `${fmtMoney(r.product.price)}/${r.product.unit}`,
-          fmtMoney(r.cost)
+          fmtMoney(r.cost),
+          r.usedInDishes ? r.usedInDishes.join(", ") : ""
         ]);
       });
       

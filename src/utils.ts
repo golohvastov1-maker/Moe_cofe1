@@ -216,6 +216,7 @@ export interface ShoppingRow {
   cost: number;
   clientAmount?: number;
   clientNotes?: string;
+  usedInDishes?: string[];
 }
 
 export function buildShopping(
@@ -223,14 +224,14 @@ export function buildShopping(
   recipes: Recipe[],
   products: Product[],
 ): ShoppingRow[] {
-  const map = new Map<string, { amount: number; clientAmount: number; notes: string[] }>();
+  const map = new Map<string, { amount: number; clientAmount: number; notes: string[]; dishes: Set<string> }>();
   for (const dish of ev.dishes) {
     const recipe = recipes.find((r) => r.id === dish.recipeId);
     if (!recipe || recipe.portions <= 0) continue;
     const k = dish.portions / recipe.portions;
     const rows = dish.overrides ?? recipe.ingredients;
     for (const row of rows) {
-      const entry = map.get(row.productId) ?? { amount: 0, clientAmount: 0, notes: [] };
+      const entry = map.get(row.productId) ?? { amount: 0, clientAmount: 0, notes: [], dishes: new Set() };
       const totalAmount = row.amount * k;
       if (row.clientProvided) {
         entry.clientAmount += totalAmount;
@@ -238,6 +239,7 @@ export function buildShopping(
       } else {
         entry.amount += totalAmount;
       }
+      entry.dishes.add(recipe.name);
       map.set(row.productId, entry);
     }
   }
@@ -251,6 +253,7 @@ export function buildShopping(
         cost: ingredientCost({ productId: pid, amount: entry.amount }, products),
         clientAmount: entry.clientAmount,
         clientNotes: entry.notes.length > 0 ? entry.notes.join("; ") : undefined,
+        usedInDishes: Array.from(entry.dishes),
       });
     }
   }
