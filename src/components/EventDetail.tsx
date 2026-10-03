@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import type { Category, DocKind, EventPlan, IngredientRow } from "../types";
 import { EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildShopping, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, uid } from "../utils";
+import { amountLabel, buildShopping, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, todayISO, uid } from "../utils";
 import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, textareaCls, useCountUp, useToast } from "./UI";
 import { IcBook, IcBriefcase, IcCart, IcChevronLeft, IcComment, IcDoc, IcPencil, IcPlus, IcReset, IcRuble, IcSearch, IcUsers, IcX } from "./Icons";
 import { EventDocPreview } from "./PrintDocs";
@@ -389,7 +389,7 @@ function CustomServiceModal({ open, onClose, onAdd }: { open: boolean; onClose: 
 }
 
 function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind) => void }) {
-  const { state, saveEvent } = useStore();
+  const { state, saveEvent, saveCombinedShoppingList } = useStore();
   const toast = useToast();
   const shopping = buildShopping(ev, state.recipes, state.products);
   const bought = new Set(ev.bought ?? []);
@@ -397,8 +397,36 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind) => 
   const toggle = (list: "bought" | "inStock", pid: string) => {
     const cur = new Set(ev[list] ?? []);
     if (cur.has(pid)) cur.delete(pid);
-    else { cur.add(pid); const other = list === "bought" ? "inStock" : "bought"; const otherSet = new Set(ev[other] ?? []); otherSet.delete(pid); saveEvent({ ...ev, [list]: [...cur], [other]: [...otherSet] }); return; }
+    else { cur.add(pid); const other = list === "bought" ? "inStock" : "bought"; const otherSet = new Set(ev[other] ?? []); otherSet.delete(pid); saveEvent({ ...ev, [list]: [...cur], [other]: [...otherSet] }); 
+    
+    // Синхронизируем с общими списками закупок
+    state.combinedShoppingLists.forEach((csl) => {
+      if (csl.eventIds.includes(ev.id)) {
+        const updatedItems = csl.items.map((item) => {
+          if (item.productId === pid) {
+            return { ...item, [list]: !item[list], [other]: false };
+          }
+          return item;
+        });
+        saveCombinedShoppingList({ ...csl, items: updatedItems, updatedAt: todayISO() });
+      }
+    });
+    
+    return; }
     saveEvent({ ...ev, [list]: [...cur] });
+    
+    // Синхронизируем с общими списками закупок
+    state.combinedShoppingLists.forEach((csl) => {
+      if (csl.eventIds.includes(ev.id)) {
+        const updatedItems = csl.items.map((item) => {
+          if (item.productId === pid) {
+            return { ...item, [list]: false };
+          }
+          return item;
+        });
+        saveCombinedShoppingList({ ...csl, items: updatedItems, updatedAt: todayISO() });
+      }
+    });
   };
   const toBuy = shopping.filter((r) => !bought.has(r.product.id) && !inStock.has(r.product.id));
   const toBuySum = toBuy.reduce((s, r) => s + r.cost, 0);

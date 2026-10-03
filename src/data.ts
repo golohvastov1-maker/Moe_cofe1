@@ -339,6 +339,7 @@ export const seedState: AppState = {
     { id: "t05", title: "Обновить прайс-лист по овощам", eventId: null, dueDate: d(4), done: false, createdAt: d(-1) },
     { id: "t06", title: "Отправить счёт №2 на согласование", eventId: "e03", dueDate: d(-28), done: true, createdAt: d(-31) },
   ],
+  combinedShoppingLists: [],
   requisites: {
     org: "ИП Морозова А. В. · «Мое кафе»",
     inn: "ИНН 771234567890",

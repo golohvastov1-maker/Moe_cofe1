@@ -212,6 +212,28 @@ export interface Task {
   createdAt: string;
 }
 
+export interface CombinedShoppingItem {
+  productId: string;
+  amount: number;
+  cost: number;
+  bought: boolean;
+  inStock: boolean;
+  usedIn: {
+    eventId: string;
+    eventName: string;
+    dishes: { recipeName: string; amount: number }[];
+  }[];
+}
+
+export interface CombinedShoppingList {
+  id: string;
+  name: string;
+  eventIds: string[];
+  items: CombinedShoppingItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Requisites {
   org: string;
   inn: string;
@@ -228,6 +250,7 @@ export interface AppState {
   services: Service[];
   events: EventPlan[];
   tasks: Task[];
+  combinedShoppingLists: CombinedShoppingList[];
   requisites: Requisites;
 }
 

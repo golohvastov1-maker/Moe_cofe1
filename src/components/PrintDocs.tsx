@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import type { DocKind, EventPlan } from "../types";
+import type { CombinedShoppingList, DocKind, EventPlan } from "../types";
 import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, SERVING_LABEL, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildMultiShopping, buildShopping, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
+import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
 import { IcPrinter, IcX } from "./Icons";
-import { ServingBadge } from "./UI";
+import { ServingBadge, inputCls } from "./UI";
 import * as XLSX from "xlsx";
 
 const INK = "#3d3530";
@@ -498,70 +498,131 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
 }
 
 export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[]; onClose: () => void }) {
-  const { state } = useStore();
+  const { state, saveCombinedShoppingList } = useStore();
+  const [listName, setListName] = useState(`Список закупок ${todayISO()}`);
+  const [showNameInput, setShowNameInput] = useState(true);
+  
+  const handleCreate = () => {
+    const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
+    saveCombinedShoppingList(list);
+    setShowNameInput(false);
+  };
   
   const exportToExcel = () => {
-    const rows = buildMultiShopping(events, state.recipes, state.products);
+    const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
+    
     const wsData: any[][] = [
-      ["Общий список закупок"],
+      [list.name],
       [`Объединено ${events.length} ${plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])}`],
       [],
-      ["Продукт", "Категория", "Всего нужно", "Общий вес", "Цена/ед.", "Сумма", "По мероприятиям"]
+      ["Продукт", "Категория", "Всего нужно", "Цена/ед.", "Сумма", "Использование"]
     ];
     
-    rows.forEach((r) => {
-      const eventsList = r.perEvent.map((pe) => `${pe.eventName}: ${isWeighed(r.product.unit) ? amountLabel(pe.amount, r.product.unit) : pieceAmountLabel(r.product, pe.amount)}`).join("; ");
-      const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
+    list.items.forEach((item) => {
+      const product = state.products.find((p) => p.id === item.productId);
+      if (!product) return;
+      
+      const usageList = item.usedIn.map((u) => {
+        const dishesList = u.dishes.map((d) => {
+          const amountStr = isWeighed(product.unit) ? amountLabel(d.amount, product.unit) : pieceAmountLabel(product, d.amount);
+          return `${d.recipeName} — ${amountStr}`;
+        }).join(", ");
+        return `${u.eventName} (${dishesList})`;
+      }).join("; ");
+      
       wsData.push([
-        r.product.name,
-        r.product.category,
-        isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount),
-        totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
-        `${fmtMoney(r.product.price)}/${r.product.unit}`,
-        fmtMoney(r.cost),
-        eventsList
+        product.name,
+        product.category,
+        isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount),
+        `${fmtMoney(product.price)}/${product.unit}`,
+        fmtMoney(item.cost),
+        usageList
       ]);
     });
     
-    const total = rows.reduce((s, r) => s + r.cost, 0);
+    const total = list.items.reduce((s, item) => s + item.cost, 0);
     wsData.push([]);
-    wsData.push(["", "", "", "", "", "ИТОГО:", fmtMoney(total)]);
+    wsData.push(["", "", "", "", "ИТОГО:", fmtMoney(total)]);
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Общий список");
-    XLSX.writeFile(wb, `Общий список закупок.xlsx`);
+    
+    XLSX.writeFile(wb, `${list.name}.xlsx`);
   };
   
+  if (showNameInput) {
+    return (
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#04100c]/97 backdrop-blur-md">
+        <div className="w-full max-w-[500px] rounded-[16px] border border-line bg-pine-900 p-6 shadow-2xl">
+          <h2 className="font-display text-[20px] text-cream mb-4">Создать общий список закупок</h2>
+          <p className="text-[13px] text-sage mb-4">
+            Объединено {events.length} {plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])}
+          </p>
+          <div className="mb-6">
+            <label className="block text-[11px] font-bold uppercase tracking-[0.08em] text-sage mb-2">
+              Название списка
+            </label>
+            <input
+              type="text"
+              value={listName}
+              onChange={(e) => setListName(e.target.value)}
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={onClose}
+              className="tap rounded-[12px] border border-line px-5 py-2.5 font-display text-[13px] font-bold text-sage transition-colors hover:border-pine-400 hover:text-cream"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={!listName.trim()}
+              className="tap flex items-center gap-2 rounded-[12px] bg-saffron px-5 py-2.5 font-display text-[13px] font-bold text-pine-950 transition-opacity hover:brightness-110 disabled:opacity-35"
+            >
+              <IcPrinter size={16} /> Создать и просмотреть
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
+  
   return (
-    <PreviewShell title="Общий список закупок" subtitle={`${events.length} ${plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])} · ингредиенты суммированы`} onClose={onClose} onExportExcel={exportToExcel}>
-      <MultiShoppingDoc events={events} />
+    <PreviewShell title={list.name} subtitle={`${events.length} ${plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])} · ингредиенты суммированы`} onClose={onClose} onExportExcel={exportToExcel}>
+      <CombinedShoppingDoc list={list} />
     </PreviewShell>
   );
 }
 
-function MultiShoppingDoc({ events }: { events: EventPlan[] }) {
+function CombinedShoppingDoc({ list }: { list: CombinedShoppingList }) {
   const { state } = useStore();
-  const rows = buildMultiShopping(events, state.recipes, state.products);
-  const total = rows.reduce((s, r) => s + r.cost, 0);
+  const total = list.items.reduce((s, item) => s + item.cost, 0);
   
   return (
     <div className="px-10 py-12" style={{ background: "#fefdfb" }}>
       <DocHeader note="объединённая ведомость" />
       <div className="flex items-end justify-between gap-4 border-b-2 pb-4" style={{ borderColor: INK }}>
         <div>
-          <h1 className="font-display text-[24px] leading-tight">Общий список закупок</h1>
-          <p className="mt-1 text-[12.5px]" style={{ color: SOFT }}>Объединено {events.length} {plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])}: {events.map((e) => `${e.name} (${fmtDateLong(e.date)})`).join(" · ")}</p>
+          <h1 className="font-display text-[24px] leading-tight">{list.name}</h1>
+          <p className="mt-1 text-[12.5px]" style={{ color: SOFT }}>Объединено {list.eventIds.length} {plural(list.eventIds.length, ["мероприятие", "мероприятия", "мероприятий"])}</p>
         </div>
-        <p className="shrink-0 text-right text-[11.5px]" style={{ color: SOFT }}>всего {rows.length} позиций</p>
+        <p className="shrink-0 text-right text-[11.5px]" style={{ color: SOFT }}>всего {list.items.length} позиций</p>
       </div>
       {(() => {
-        const byCategory = new Map<string, typeof rows>();
-        for (const r of rows) {
-          const cat = r.product.category;
+        const byCategory = new Map<string, typeof list.items>();
+        for (const item of list.items) {
+          const product = state.products.find((p) => p.id === item.productId);
+          if (!product) continue;
+          const cat = product.category;
           const arr = byCategory.get(cat);
-          if (arr) arr.push(r);
-          else byCategory.set(cat, [r]);
+          if (arr) arr.push(item);
+          else byCategory.set(cat, [item]);
         }
         const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => {
           const orderA = PRODUCT_CATEGORIES.indexOf(a as any);
@@ -570,7 +631,7 @@ function MultiShoppingDoc({ events }: { events: EventPlan[] }) {
         });
         return sortedCategories.map((category) => {
           const items = byCategory.get(category)!;
-          const categoryTotal = items.reduce((s, r) => s + r.cost, 0);
+          const categoryTotal = items.reduce((s, item) => s + item.cost, 0);
           return (
             <div key={category} className="mt-5">
               <div className="mb-2 flex items-center gap-2 border-b-2 pb-1" style={{ borderColor: GOLD }}>
@@ -589,21 +650,39 @@ function MultiShoppingDoc({ events }: { events: EventPlan[] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((r, idx) => (
-                    <tr key={r.product.id} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
-                      <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>
-                        {r.product.name}
-                        <p className="mt-0.5 text-[9px] leading-relaxed" style={{ color: SOFT }}>
-                          {r.perEvent.map((pe) => `${pe.eventName}: ${isWeighed(r.product.unit) ? amountLabel(pe.amount, r.product.unit) : pieceAmountLabel(r.product, pe.amount)}`).join(" · ")}
-                        </p>
-                      </td>
-                      <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
-                        {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
-                      </td>
-                      <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
-                      <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.cost)}</td>
-                    </tr>
-                  ))}
+                  {items.map((item, idx) => {
+                    const product = state.products.find((p) => p.id === item.productId);
+                    if (!product) return null;
+                    return (
+                      <tr key={item.productId} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                        <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>
+                          {product.name}
+                          <div className="mt-1 text-[9px] leading-relaxed" style={{ color: SOFT }}>
+                            {item.usedIn.map((u, i) => {
+                              const dishesList = u.dishes.map((d) => {
+                                const amountStr = isWeighed(product.unit) ? amountLabel(d.amount, product.unit) : pieceAmountLabel(product, d.amount);
+                                return `${d.recipeName} — ${amountStr}`;
+                              }).join(", ");
+                              return (
+                                <div key={i}>
+                                  <span className="font-semibold">{u.eventName}</span> — {dishesList}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
+                          {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount)}
+                        </td>
+                        <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>
+                          {fmtMoney(product.price)}/{product.unit}
+                        </td>
+                        <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>
+                          {fmtMoney(item.cost)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

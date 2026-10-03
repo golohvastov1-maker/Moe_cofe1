@@ -57,6 +57,7 @@ function normalize(raw: Partial<AppState>): AppState {
         })
       : base.events,
     tasks: Array.isArray(raw.tasks) ? raw.tasks : base.tasks,
+    combinedShoppingLists: Array.isArray(raw.combinedShoppingLists) ? raw.combinedShoppingLists : [],
     requisites: { ...base.requisites, ...(raw.requisites ?? {}) },
   };
 }
@@ -74,6 +75,8 @@ function load(): AppState {
   return seedState;
 }
 
+import type { CombinedShoppingList } from "./types";
+
 interface StoreApi {
   state: AppState;
   saveProduct: (p: Product) => void;
@@ -90,6 +93,8 @@ interface StoreApi {
   saveTask: (t: Task) => void;
   deleteTask: (id: string) => void;
   toggleTask: (id: string) => void;
+  saveCombinedShoppingList: (list: CombinedShoppingList) => void;
+  deleteCombinedShoppingList: (id: string) => void;
   saveRequisites: (r: Requisites) => void;
   usageInRecipes: (productId: string) => number;
   usageInEvents: (recipeId: string) => number;
@@ -281,6 +286,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const saveCombinedShoppingList = (list: CombinedShoppingList) => {
+    setState((s) => {
+      const exists = s.combinedShoppingLists.some((x) => x.id === list.id);
+      return {
+        ...s,
+        combinedShoppingLists: exists
+          ? s.combinedShoppingLists.map((x) => (x.id === list.id ? list : x))
+          : [...s.combinedShoppingLists, list],
+      };
+    });
+  };
+
+  const deleteCombinedShoppingList = (id: string) => {
+    setState((s) => ({
+      ...s,
+      combinedShoppingLists: s.combinedShoppingLists.filter((l) => l.id !== id),
+    }));
+  };
+
   const saveRequisites = (r: Requisites) => {
     setState((s) => ({ ...s, requisites: r }));
   };
@@ -307,6 +331,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveTask,
     deleteTask,
     toggleTask,
+    saveCombinedShoppingList,
+    deleteCombinedShoppingList,
     saveRequisites,
     usageInRecipes,
     usageInEvents,
