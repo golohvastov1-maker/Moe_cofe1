@@ -8,7 +8,7 @@ import { RecipesScreen } from "./components/RecipesScreen";
 import { EventsScreen } from "./components/EventsScreen";
 import { EventDetail } from "./components/EventDetail";
 import { TasksScreen } from "./components/TasksScreen";
-import { BrandMark, IcBasket, IcBriefcase, IcCalendar, IcDash, IcHat, IcTask, IcDoc } from "./components/Icons";
+import { BrandMark, IcBasket, IcBriefcase, IcCalendar, IcDash, IcDoc, IcHat, IcTask } from "./components/Icons";
 
 const NAV: { id: Tab; label: string; short: string; Icon: typeof IcDash }[] = [
   { id: "dashboard", label: "Дашборд", short: "Главная", Icon: IcDash },
@@ -41,7 +41,7 @@ function AppInner() {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col border-r border-line bg-gradient-to-b from-pine-900/95 to-pine-950/95 backdrop-blur-xl md:flex">
         <div className="flex items-center gap-2.5 px-5 pb-5 pt-6"><BrandMark size={28} /><div><p className="font-display text-[16px] leading-none text-cream">Мое кафе</p><p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sage">учёт и калькуляция</p></div></div>
         <nav className="grow space-y-1 px-3">{NAV.map((n) => { const active = tab === n.id; return (<button key={n.id} onClick={() => goTab(n.id)} className={`tap relative flex w-full items-center gap-3 rounded-[12px] px-3.5 py-2.5 text-[13px] font-semibold transition-all ${active ? "bg-gradient-to-r from-saffron/20 to-transparent text-saffron shadow-lg shadow-saffron/10" : "text-sage hover:bg-pine-800/60 hover:text-cream"}`}><span className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-saffron transition-all ${active ? "opacity-100 shadow-lg shadow-saffron/50" : "opacity-0"}`} /><n.Icon size={18} />{n.label}</button>); })}</nav>
-        <div className="m-3 rounded-[14px] border border-line bg-pine-800/50 p-3.5"><p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-sage">Локальная база</p><p className="mt-1.5 text-[11px] leading-relaxed text-sage">Все данные хранятся в этом браузере: склад, рецепты, сметы, задачи и журнал цен.</p></div>
+        <div className="m-3 rounded-[14px] border border-line bg-pine-800/50 p-3.5"><p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-sage">Локальная база</p><p className="mt-1.5 text-[11px] leading-relaxed text-sage">Все данные хранятся в этом браузере.</p></div>
       </aside>
       <div className="sticky top-0 z-30 border-b border-line bg-gradient-to-b from-pine-900/98 to-pine-950/95 backdrop-blur-xl md:hidden">
         <div className="flex h-[54px] items-center gap-2.5 px-5"><BrandMark size={24} /><span className="font-display text-[15px] text-cream">Мое кафе</span><span className="ml-auto rounded-full border border-saffron/30 bg-saffron/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-saffron">{NAV.find((n) => n.id === tab)?.label}</span></div>

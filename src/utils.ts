@@ -216,6 +216,7 @@ export interface ShoppingRow {
   cost: number;
   clientAmount?: number;
   clientNotes?: string;
+  usedInDishes?: { name: string; amount: string }[];
 }
 
 export function buildShopping(
@@ -223,14 +224,15 @@ export function buildShopping(
   recipes: Recipe[],
   products: Product[],
 ): ShoppingRow[] {
-  const map = new Map<string, { amount: number; clientAmount: number; notes: string[] }>();
+  const map = new Map<string, { amount: number; clientAmount: number; notes: string[]; dishes: Map<string, number> }>();
   for (const dish of ev.dishes) {
     const recipe = recipes.find((r) => r.id === dish.recipeId);
     if (!recipe || recipe.portions <= 0) continue;
     const k = dish.portions / recipe.portions;
     const rows = dish.overrides ?? recipe.ingredients;
     for (const row of rows) {
-      const entry = map.get(row.productId) ?? { amount: 0, clientAmount: 0, notes: [] };
+      const existing = map.get(row.productId);
+      const entry = existing ?? { amount: 0, clientAmount: 0, notes: [], dishes: new Map<string, number>() };
       const totalAmount = row.amount * k;
       if (row.clientProvided) {
         entry.clientAmount += totalAmount;
@@ -238,6 +240,8 @@ export function buildShopping(
       } else {
         entry.amount += totalAmount;
       }
+      const currentDishAmount = entry.dishes.get(recipe.name) ?? 0;
+      entry.dishes.set(recipe.name, currentDishAmount + totalAmount);
       map.set(row.productId, entry);
     }
   }
@@ -245,12 +249,17 @@ export function buildShopping(
   for (const [pid, entry] of map) {
     const product = products.find((p) => p.id === pid);
     if (product) {
+      const usedInDishes = Array.from(entry.dishes.entries()).map(([name, amount]) => ({
+        name,
+        amount: isWeighed(product.unit) ? amountLabel(amount, product.unit) : pieceAmountLabel(product, amount),
+      }));
       out.push({
         product,
         amount: entry.amount,
         cost: ingredientCost({ productId: pid, amount: entry.amount }, products),
         clientAmount: entry.clientAmount,
         clientNotes: entry.notes.length > 0 ? entry.notes.join("; ") : undefined,
+        usedInDishes,
       });
     }
   }
@@ -311,6 +320,110 @@ export function buildMultiShopping(
     if (catOrder !== 0) return catOrder;
     return a.product.name.localeCompare(b.product.name, "ru");
   });
+}
+
+import type { CombinedShoppingItem, CombinedShoppingList } from "./types";
+
+export function buildCombinedShoppingList(
+  name: string,
+  events: EventPlan[],
+  recipes: Recipe[],
+  products: Product[],
+  existingList?: CombinedShoppingList,
+): CombinedShoppingList {
+  const now = todayISO();
+  const items: CombinedShoppingItem[] = [];
+  
+  // Собираем данные по всем продуктам
+  const productMap = new Map<string, {
+    amount: number;
+    cost: number;
+    usedIn: Map<string, { eventName: string; dishes: Map<string, number> }>;
+  }>();
+  
+  for (const ev of events) {
+    for (const dish of ev.dishes) {
+      const recipe = recipes.find((r) => r.id === dish.recipeId);
+      if (!recipe || recipe.portions <= 0) continue;
+      
+      const k = dish.portions / recipe.portions;
+      const rows = dish.overrides ?? recipe.ingredients;
+      
+      for (const row of rows) {
+        if (row.clientProvided) continue; // Пропускаем продукты клиента
+        
+        const product = products.find((p) => p.id === row.productId);
+        if (!product) continue;
+        
+        const totalAmount = row.amount * k;
+        
+        let entry = productMap.get(row.productId);
+        if (!entry) {
+          entry = { amount: 0, cost: 0, usedIn: new Map() };
+          productMap.set(row.productId, entry);
+        }
+        
+        entry.amount += totalAmount;
+        entry.cost += ingredientCost({ productId: row.productId, amount: totalAmount }, products);
+        
+        let eventEntry = entry.usedIn.get(ev.id);
+        if (!eventEntry) {
+          eventEntry = { eventName: ev.name, dishes: new Map() };
+          entry.usedIn.set(ev.id, eventEntry);
+        }
+        
+        const currentDishAmount = eventEntry.dishes.get(recipe.name) ?? 0;
+        eventEntry.dishes.set(recipe.name, currentDishAmount + totalAmount);
+      }
+    }
+  }
+  
+  // Преобразуем в массив CombinedShoppingItem
+  for (const [productId, data] of productMap) {
+    const product = products.find((p) => p.id === productId);
+    if (!product) continue;
+    
+    // Проверяем существующие отметки
+    const existingItem = existingList?.items.find((i) => i.productId === productId);
+    
+    const usedIn = Array.from(data.usedIn.entries()).map(([eventId, eventData]) => ({
+      eventId,
+      eventName: eventData.eventName,
+      dishes: Array.from(eventData.dishes.entries()).map(([recipeName, amount]) => ({
+        recipeName,
+        amount,
+      })),
+    }));
+    
+    items.push({
+      productId,
+      amount: data.amount,
+      cost: data.cost,
+      bought: existingItem?.bought ?? false,
+      inStock: existingItem?.inStock ?? false,
+      usedIn,
+    });
+  }
+  
+  // Сортируем по категориям
+  items.sort((a, b) => {
+    const productA = products.find((p) => p.id === a.productId);
+    const productB = products.find((p) => p.id === b.productId);
+    if (!productA || !productB) return 0;
+    
+    const catOrder = PRODUCT_CATEGORIES.indexOf(productA.category) - PRODUCT_CATEGORIES.indexOf(productB.category);
+    if (catOrder !== 0) return catOrder;
+    return productA.name.localeCompare(productB.name, "ru");
+  });
+  
+  return {
+    id: existingList?.id ?? uid(),
+    name,
+    eventIds: events.map((e) => e.id),
+    items,
+    createdAt: existingList?.createdAt ?? now,
+    updatedAt: now,
+  };
 }
 
 export interface PriceRowInput {

@@ -126,3 +126,6 @@ export const IcTable = (p: P) => (
 export const IcPlate = (p: P) => (
   <Svg {...p}><circle cx="12" cy="12" r="8.2" /><circle cx="12" cy="12" r="4.4" /></Svg>
 );
+export const IcComment = (p: P) => (
+  <Svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></Svg>
+);

@@ -202,8 +202,30 @@ export function useCountUp(target: number, duration = 600): number {
 export function AmountEditor({ product, value, onChange }: { product: import("../types").Product; value: number; onChange: (v: number) => void }) {
   const weighed = product.unit === "кг" || product.unit === "л";
   const canSwap = !weighed && (product.unit === "шт" || product.unit === "упак" || product.unit === "пучок") && !!product.netWeight && product.netWeight > 0;
-  const [gramsMode, setGramsMode] = useState(false);
+  
+  // Автоматически определяем режим на основе значения
+  const getInitialGramsMode = () => {
+    if (weighed) {
+      // Для весовых продуктов: если значение < 1000, показываем в граммах
+      return value < 1000;
+    } else if (canSwap) {
+      // Для штучных продуктов: если значение < 1, показываем в граммах
+      return value < 1;
+    }
+    return false;
+  };
+  
+  const [gramsMode, setGramsMode] = useState(getInitialGramsMode());
+  const [userChangedMode, setUserChangedMode] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  
+  // Обновляем режим при изменении значения извне (только если пользователь не менял вручную)
+  useEffect(() => {
+    if (!userChangedMode) {
+      const newMode = weighed ? value < 1000 : (canSwap ? value < 1 : false);
+      setGramsMode(newMode);
+    }
+  }, [value, weighed, canSwap, userChangedMode]);
   
   const formatDisplay = () => {
     if (weighed) {
@@ -254,6 +276,7 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
   const switchMode = (toGrams: boolean) => { 
     if (toGrams !== gramsMode) {
       setGramsMode(toGrams);
+      setUserChangedMode(true); // Пользователь изменил режим вручную
       setTimeout(() => setInputValue(formatDisplay()), 0);
     }
   };

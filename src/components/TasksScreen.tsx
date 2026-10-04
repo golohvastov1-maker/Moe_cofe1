@@ -33,10 +33,7 @@ export function TasksScreen({ onOpenEvent }: { onOpenEvent: (id: string) => void
   const [sheet, setSheet] = useState<{ open: boolean; editing: Task | null }>({ open: false, editing: null });
   const today = todayISO();
   const weekEnd = addDaysISO(7);
-  const sorted = useMemo(() => [...state.tasks].sort((a, b) => {
-    if (a.done !== b.done) return a.done ? 1 : -1;
-    return a.dueDate.localeCompare(b.dueDate);
-  }), [state.tasks]);
+  const sorted = useMemo(() => [...state.tasks].sort((a, b) => { if (a.done !== b.done) return a.done ? 1 : -1; return a.dueDate.localeCompare(b.dueDate); }), [state.tasks]);
   const filtered = sorted.filter((t) => {
     switch (filter) {
       case "overdue": return !t.done && t.dueDate < today;
@@ -62,32 +59,12 @@ export function TasksScreen({ onOpenEvent }: { onOpenEvent: (id: string) => void
   return (
     <section className="px-5 pb-8 pt-6 md:px-8">
       <header className="reveal flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-[26px] leading-none text-cream">Задачи</h1>
-          <p className="mt-2 text-[13px] text-sage">Выполнено {doneCount} из {state.tasks.length} · привязывайте задачи к мероприятиям</p>
-        </div>
-        <button onClick={() => setSheet({ open: true, editing: null })} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:shadow-saffron/40 hover:scale-105"><IcPlus size={16} /> Задача</button>
+        <div><h1 className="font-display text-[26px] leading-none text-cream">Задачи</h1><p className="mt-2 text-[13px] text-sage">Выполнено {doneCount} из {state.tasks.length} · привязывайте задачи к мероприятиям</p></div>
+        <button onClick={() => setSheet({ open: true, editing: null })} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Задача</button>
       </header>
-      {state.tasks.length > 0 && (
-        <div className="reveal mt-4 h-1.5 overflow-hidden rounded-full bg-pine-600">
-          <div className="h-full rounded-full bg-mint transition-all duration-500 ease-out" style={{ width: `${progress * 100}%` }} />
-        </div>
-      )}
-      <div className="mt-4">
-        <Segmented options={[
-          { value: "all", label: `Все · ${countFor("all")}` },
-          { value: "overdue", label: `Просрочено · ${countFor("overdue")}` },
-          { value: "today", label: `Сегодня · ${countFor("today")}` },
-          { value: "week", label: `Неделя · ${countFor("week")}` },
-          { value: "later", label: `Позже · ${countFor("later")}` },
-          { value: "done", label: `Готово · ${countFor("done")}` },
-        ]} value={filter} onChange={setFilter} />
-      </div>
-      {state.tasks.length === 0 ? (
-        <EmptyState icon={<IcTask size={24} />} title="Задач пока нет" text="Запишите, что нужно сделать к мероприятиям: закупки, звонки, согласования меню." action={<button onClick={() => setSheet({ open: true, editing: null })} className="tap rounded-full bg-saffron px-5 py-2.5 font-display text-[12px] font-bold text-pine-950">Новая задача</button>} />
-      ) : filtered.length === 0 ? (
-        <p className="reveal mt-10 text-center text-[13px] text-sage">В этом промежутке задач нет</p>
-      ) : (
+      {state.tasks.length > 0 && (<div className="reveal mt-4 h-1.5 overflow-hidden rounded-full bg-pine-600"><div className="h-full rounded-full bg-mint transition-all duration-500 ease-out" style={{ width: `${progress * 100}%` }} /></div>)}
+      <div className="mt-4"><Segmented options={[{ value: "all", label: `Все · ${countFor("all")}` }, { value: "overdue", label: `Просрочено · ${countFor("overdue")}` }, { value: "today", label: `Сегодня · ${countFor("today")}` }, { value: "week", label: `Неделя · ${countFor("week")}` }, { value: "later", label: `Позже · ${countFor("later")}` }, { value: "done", label: `Готово · ${countFor("done")}` }]} value={filter} onChange={setFilter} /></div>
+      {state.tasks.length === 0 ? (<EmptyState icon={<IcTask size={24} />} title="Задач пока нет" text="Запишите, что нужно сделать к мероприятиям." action={<button onClick={() => setSheet({ open: true, editing: null })} className="tap rounded-full bg-saffron px-5 py-2.5 font-display text-[12px] font-bold text-pine-950">Новая задача</button>} />) : filtered.length === 0 ? (<p className="reveal mt-10 text-center text-[13px] text-sage">В этом промежутке задач нет</p>) : (
         <div className="mt-4 space-y-2">
           {filtered.map((t, i) => {
             const ev = t.eventId ? state.events.find((e) => e.id === t.eventId) : null;
@@ -103,9 +80,7 @@ export function TasksScreen({ onOpenEvent }: { onOpenEvent: (id: string) => void
                   </div>
                 </div>
                 <button onClick={() => setSheet({ open: true, editing: t })} aria-label="Редактировать задачу" className="tap grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-line text-sage hover:text-cream"><IcPencil size={13} /></button>
-                <div className="shrink-0">
-                  <DangerConfirm onConfirm={() => { deleteTask(t.id); toast("Задача удалена", "del"); }} />
-                </div>
+                <div className="shrink-0"><DangerConfirm onConfirm={() => { deleteTask(t.id); toast("Задача удалена", "del"); }} /></div>
               </div>
             );
           })}
@@ -122,26 +97,15 @@ export function TaskModal({ open, onClose, editing, eventId }: { open: boolean; 
   const [title, setTitle] = useState("");
   const [evId, setEvId] = useState<string>("");
   const [due, setDue] = useState(addDaysISO(1));
-  useEffect(() => {
-    if (open) {
-      setTitle(editing?.title ?? "");
-      setEvId(editing?.eventId ?? eventId ?? "");
-      setDue(editing?.dueDate ?? addDaysISO(1));
-    }
-  }, [open, editing, eventId]);
+  useEffect(() => { if (open) { setTitle(editing?.title ?? ""); setEvId(editing?.eventId ?? eventId ?? ""); setDue(editing?.dueDate ?? addDaysISO(1)); } }, [open, editing, eventId]);
   const valid = title.trim().length > 0 && due !== "";
-  const save = () => {
-    if (!valid) return;
-    saveTask({ id: editing?.id ?? uid(), title: title.trim(), eventId: evId || null, dueDate: due, done: editing?.done ?? false, createdAt: editing?.createdAt ?? todayISO() });
-    toast(editing ? "Задача обновлена" : "Задача добавлена");
-    onClose();
-  };
+  const save = () => { if (!valid) return; saveTask({ id: editing?.id ?? uid(), title: title.trim(), eventId: evId || null, dueDate: due, done: editing?.done ?? false, createdAt: editing?.createdAt ?? todayISO() }); toast(editing ? "Задача обновлена" : "Задача добавлена"); onClose(); };
   return (
-    <Modal open={open} onClose={onClose} title={editing ? "Задача" : "Новая задача"} subtitle="Срок подсвечивается по срочности: просрочено, сегодня, позже" footer={
+    <Modal open={open} onClose={onClose} title={editing ? "Задача" : "Новая задача"} subtitle="Срок подсвечивается по срочности" footer={
       <div className="flex items-center gap-3">
         {editing && <DangerConfirm hint="удалить?" onConfirm={() => { deleteTask(editing.id); toast("Задача удалена", "del"); onClose(); }} />}
-        <button onClick={onClose} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage transition-colors hover:border-pine-400 hover:text-cream">Отмена</button>
-        <button onClick={save} disabled={!valid} className="tap grow rounded-[14px] bg-saffron py-3 font-display text-[13px] font-bold text-pine-950 transition-opacity disabled:opacity-35">Сохранить</button>
+        <button onClick={onClose} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage hover:text-cream">Отмена</button>
+        <button onClick={save} disabled={!valid} className="tap grow rounded-[14px] bg-saffron py-3 font-display text-[13px] font-bold text-pine-950 disabled:opacity-35">Сохранить</button>
       </div>
     }>
       <div className="space-y-5">

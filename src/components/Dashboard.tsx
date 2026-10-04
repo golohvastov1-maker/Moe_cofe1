@@ -25,7 +25,7 @@ export function Dashboard({ onOpenEvent, onGoTab }: { onOpenEvent: (id: string) 
           <h1 className="mt-1.5 font-display text-[26px] leading-tight text-cream">{hello}, шеф</h1>
           <p className="mt-2 text-[13px] text-sage">Впереди {upcoming.length} {plural(upcoming.length, ["мероприятие", "мероприятия", "мероприятий"])} на <span className="font-semibold text-saffron">{fmtMoney(animSum)}</span></p>
         </div>
-        <button onClick={() => onGoTab("events")} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:shadow-saffron/40 hover:scale-105"><IcCalendar size={16} /> Новое мероприятие</button>
+        <button onClick={() => onGoTab("events")} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcCalendar size={16} /> Новое мероприятие</button>
       </header>
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
         <div>
@@ -34,7 +34,7 @@ export function Dashboard({ onOpenEvent, onGoTab }: { onOpenEvent: (id: string) 
             <button onClick={() => onGoTab("events")} className="tap flex items-center gap-1 text-[12px] font-semibold text-sage hover:text-saffron">все <IcArrowRight size={13} /></button>
           </div>
           {upcoming.length === 0 ? (
-            <p className="rounded-[14px] border border-dashed border-pine-500/70 px-4 py-6 text-center text-[12.5px] text-sage">Впереди пока пусто — самое время запланировать событие</p>
+            <p className="rounded-[14px] border border-dashed border-pine-500/70 px-4 py-6 text-center text-[12.5px] text-sage">Впереди пока пусто</p>
           ) : (
             <div className="space-y-2.5">
               {upcoming.slice(0, 4).map((e, i) => {
@@ -43,7 +43,7 @@ export function Dashboard({ onOpenEvent, onGoTab }: { onOpenEvent: (id: string) 
                 const soon = daysUntil(e.date) <= 14;
                 const [day, mon] = fmtDateShort(e.date).split(" ");
                 return (
-                  <button key={e.id} onClick={() => onOpenEvent(e.id)} className="reveal card-hover flex w-full items-center gap-3.5 rounded-[16px] border border-line bg-gradient-to-br from-pine-800 to-pine-850 p-4 text-left" style={{ animationDelay: `${120 + i * 70}ms` }}>
+                  <button key={e.id} onClick={() => onOpenEvent(e.id)} className="reveal card-hover flex w-full items-center gap-3.5 rounded-[16px] border border-line bg-pine-800 p-4 text-left" style={{ animationDelay: `${120 + i * 70}ms` }}>
                     <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[12px] border border-saffron/30 bg-pine-700/80 text-center">
                       <div>
                         <p className="font-display text-[15px] leading-none text-saffron">{day}</p>
@@ -76,7 +76,7 @@ export function Dashboard({ onOpenEvent, onGoTab }: { onOpenEvent: (id: string) 
             <button onClick={() => onGoTab("tasks")} className="tap flex items-center gap-1 text-[12px] font-semibold text-sage hover:text-saffron">все <IcArrowRight size={13} /></button>
           </div>
           {openTasks.length === 0 ? (
-            <p className="rounded-[14px] border border-dashed border-pine-500/70 px-4 py-6 text-center text-[12.5px] text-sage">Открытых задач нет — можно выдохнуть</p>
+            <p className="rounded-[14px] border border-dashed border-pine-500/70 px-4 py-6 text-center text-[12.5px] text-sage">Открытых задач нет</p>
           ) : (
             <div className="space-y-2">
               {openTasks.slice(0, 5).map((t, i) => {
