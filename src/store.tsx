@@ -15,7 +15,8 @@ import { seedState } from "./data";
 import type { PriceRowInput } from "./utils";
 import { round2, todayISO, uid } from "./utils";
 
-const KEY = "moe-cafe-v7";
+const KEY = "moe-cafe-v8";
+const LEGACY_KEY = "moe-cafe-v7";
 
 function normalize(raw: Partial<AppState>): AppState {
   const base = seedState;
@@ -51,6 +52,7 @@ function normalize(raw: Partial<AppState>): AppState {
             clientItems: e.clientItems ?? [],
             bought: e.bought ?? [],
             inStock: e.inStock ?? [],
+            purchasePlaces: e.purchasePlaces ?? {},
             comment: e.comment ?? "",
             dishes: (e.dishes ?? []).map((d) => ({ ...d, discount: d.discount ?? 0, comment: d.comment ?? "" })),
           };
@@ -63,14 +65,16 @@ function normalize(raw: Partial<AppState>): AppState {
 }
 
 function load(): AppState {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<AppState>;
-      return normalize(parsed);
+  for (const key of [KEY, LEGACY_KEY]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<AppState>;
+        return normalize(parsed);
+      }
+    } catch (error) {
+      console.error(`Не удалось загрузить данные из ${key}.`, error);
     }
-  } catch {
-    /* повреждённые данные — используем демо */
   }
   return seedState;
 }
@@ -95,6 +99,8 @@ interface StoreApi {
   toggleTask: (id: string) => void;
   saveCombinedShoppingList: (list: CombinedShoppingList) => void;
   deleteCombinedShoppingList: (id: string) => void;
+  setShoppingStatus: (eventIds: string[], productId: string, field: "bought" | "inStock", checked: boolean) => void;
+  setPurchasePlace: (eventIds: string[], productId: string, place: string) => void;
   saveRequisites: (r: Requisites) => void;
   usageInRecipes: (productId: string) => number;
   usageInEvents: (recipeId: string) => number;
@@ -108,8 +114,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
-    } catch {
-      /* квота переполнена — молча пропускаем */
+    } catch (error) {
+      console.error("Не удалось сохранить данные приложения.", error);
+      window.dispatchEvent(new CustomEvent("moe-cafe-storage-error"));
     }
   }, [state]);
 
@@ -305,6 +312,115 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const setShoppingStatus: StoreApi["setShoppingStatus"] = (eventIds, productId, field, checked) => {
+    setState((s) => {
+      const affectedEventIds = new Set(eventIds);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const list of s.combinedShoppingLists) {
+          const item = list.items.find((entry) => entry.productId === productId);
+          const relatedEventIds = item
+            ? item.usedIn.length > 0
+              ? item.usedIn.map((usage) => usage.eventId)
+              : list.eventIds
+            : [];
+          if (!item || !relatedEventIds.some((eventId) => affectedEventIds.has(eventId))) continue;
+          for (const eventId of relatedEventIds) {
+            if (!affectedEventIds.has(eventId)) {
+              affectedEventIds.add(eventId);
+              expanded = true;
+            }
+          }
+        }
+      }
+
+      const otherField = field === "bought" ? "inStock" : "bought";
+      const events = s.events.map((event) => {
+        if (!affectedEventIds.has(event.id)) return event;
+        const current = new Set(event[field] ?? []);
+        const other = new Set(event[otherField] ?? []);
+        if (checked) {
+          current.add(productId);
+          other.delete(productId);
+        } else {
+          current.delete(productId);
+        }
+        return { ...event, [field]: [...current], [otherField]: [...other] };
+      });
+
+      const combinedShoppingLists = s.combinedShoppingLists.map((list) => {
+        const item = list.items.find((entry) => entry.productId === productId);
+        const relatedEventIds = item
+          ? item.usedIn.length > 0
+            ? item.usedIn.map((usage) => usage.eventId)
+            : list.eventIds
+          : [];
+        if (!item || !relatedEventIds.some((eventId) => affectedEventIds.has(eventId))) return list;
+        return {
+          ...list,
+          items: list.items.map((entry) =>
+            entry.productId === productId
+              ? { ...entry, [field]: checked, [otherField]: checked ? false : entry[otherField] }
+              : entry,
+          ),
+          updatedAt: todayISO(),
+        };
+      });
+
+      return { ...s, events, combinedShoppingLists };
+    });
+  };
+
+  const setPurchasePlace: StoreApi["setPurchasePlace"] = (eventIds, productId, place) => {
+    setState((s) => {
+      const affectedEventIds = new Set(eventIds);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const list of s.combinedShoppingLists) {
+          const item = list.items.find((entry) => entry.productId === productId);
+          if (!item) continue;
+          const relatedEventIds = item.usedIn.length > 0
+            ? item.usedIn.map((usage) => usage.eventId)
+            : list.eventIds;
+          if (!relatedEventIds.some((eventId) => affectedEventIds.has(eventId))) continue;
+          for (const eventId of relatedEventIds) {
+            if (!affectedEventIds.has(eventId)) {
+              affectedEventIds.add(eventId);
+              expanded = true;
+            }
+          }
+        }
+      }
+
+      const trimmedPlace = place.trim();
+      const events = s.events.map((event) => {
+        if (!affectedEventIds.has(event.id)) return event;
+        const purchasePlaces = { ...event.purchasePlaces };
+        if (trimmedPlace) purchasePlaces[productId] = place;
+        else delete purchasePlaces[productId];
+        return { ...event, purchasePlaces };
+      });
+      const combinedShoppingLists = s.combinedShoppingLists.map((list) => {
+        const item = list.items.find((entry) => entry.productId === productId);
+        if (!item) return list;
+        const relatedEventIds = item.usedIn.length > 0
+          ? item.usedIn.map((usage) => usage.eventId)
+          : list.eventIds;
+        if (!relatedEventIds.some((eventId) => affectedEventIds.has(eventId))) return list;
+        return {
+          ...list,
+          items: list.items.map((entry) =>
+            entry.productId === productId ? { ...entry, purchasePlace: place } : entry,
+          ),
+          updatedAt: todayISO(),
+        };
+      });
+      return { ...s, events, combinedShoppingLists };
+    });
+  };
+
   const saveRequisites = (r: Requisites) => {
     setState((s) => ({ ...s, requisites: r }));
   };
@@ -333,6 +449,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toggleTask,
     saveCombinedShoppingList,
     deleteCombinedShoppingList,
+    setShoppingStatus,
+    setPurchasePlace,
     saveRequisites,
     usageInRecipes,
     usageInEvents,

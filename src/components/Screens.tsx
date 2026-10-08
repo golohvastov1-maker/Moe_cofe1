@@ -147,7 +147,14 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
   }, [open, editing]);
   const priceN = parseNum(price);
   const netN = parseNum(netWeight);
-  const valid = name.trim().length > 0 && priceN > 0;
+  const normalizedName = name.trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
+  const duplicate = normalizedName
+    ? state.products.find((product) =>
+        product.id !== editing?.id &&
+        product.name.trim().toLocaleLowerCase("ru").replace(/\s+/g, " ") === normalizedName,
+      )
+    : undefined;
+  const valid = name.trim().length > 0 && priceN > 0 && !duplicate;
   const used = editing ? usageInRecipes(editing.id) : 0;
   const history = editing ? state.priceLog.filter((l) => l.productId === editing.id).slice(0, 5) : [];
   const save = () => {
@@ -165,7 +172,22 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
       </div>
     }>
       <div className="space-y-5 pt-1">
-        <Field label="Название"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Куриное филе" className={inputCls} autoFocus={!editing} /></Field>
+        <Field label="Название">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Например, Куриное филе"
+            className={inputCls}
+            autoFocus={!editing}
+            aria-invalid={Boolean(duplicate)}
+            aria-describedby={duplicate ? "product-duplicate-warning" : undefined}
+          />
+          {duplicate && (
+            <span id="product-duplicate-warning" role="alert" className="mt-1.5 block text-[11.5px] text-coral">
+              Продукт «{duplicate.name}» уже есть в списке. Измените название или откройте существующий продукт.
+            </span>
+          )}
+        </Field>
         <Field label="Категория"><div className="flex flex-wrap gap-1.5">{PRODUCT_CATEGORIES.map((c) => (<button key={c} onClick={() => setCategory(c)} className={`tap rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${category === c ? "" : "border-line bg-pine-700 text-sage hover:text-cream"}`} style={category === c ? { borderColor: productCatColor(c), background: `${productCatColor(c)}1f`, color: productCatColor(c) } : undefined}>{c}</button>))}</div></Field>
         <Field label="Единица измерения" hint={`цена за 1 ${unit}`}><div className="grid grid-cols-3 gap-2">{UNITS.map((u) => (<button key={u} onClick={() => setUnit(u)} className={`tap rounded-[11px] border py-2 text-[13px] font-semibold transition-colors ${u === unit ? "border-saffron bg-saffron text-pine-950" : "border-line bg-pine-700 text-sage hover:text-cream"}`}>{u}</button>))}</div></Field>
         {piece && (<Field label="Масса нетто, г" hint="вес одной штуки/упаковки"><div className="relative"><input value={netWeight} onChange={(e) => setNetWeight(e.target.value)} placeholder="Например, 400" inputMode="numeric" className={inputCls + " pr-10 font-display font-semibold"} /><span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] font-bold text-sage">г</span></div>{netN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">1 {unit} = {netN >= 1000 ? `${fmtNum(netN / 1000)} кг` : `${netN} г`}</span>)}</Field>)}

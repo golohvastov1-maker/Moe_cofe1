@@ -3,10 +3,9 @@ import type { ReactNode } from "react";
 import type { CombinedShoppingList, DocKind, EventPlan } from "../types";
 import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, SERVING_LABEL, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
-import { IcPrinter, IcX } from "./Icons";
-import { ServingBadge, inputCls } from "./UI";
-import * as XLSX from "xlsx";
+import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, comparePurchasePlaces, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
+import { IcDownload, IcPrinter, IcX } from "./Icons";
+import { ServingBadge, inputCls, useToast } from "./UI";
 
 const INK = "#3d3530";
 const SOFT = "#8a7f75";
@@ -117,16 +116,14 @@ function ChefDoc({ ev }: { ev: EventPlan }) {
   );
 }
 
-function ShoppingDoc({ ev }: { ev: EventPlan }) {
-  const { state, saveEvent } = useStore();
+function ShoppingDoc({ ev, sortMode }: { ev: EventPlan; sortMode: "category" | "place" }) {
+  const { state, setShoppingStatus } = useStore();
   const rows = buildShopping(ev, state.recipes, state.products);
   const bought = ev.bought ?? [];
   const inStock = ev.inStock ?? [];
   const toggle = (pid: string, kind: "bought" | "stock") => {
-    const arr = kind === "bought" ? bought : inStock;
-    const other = kind === "bought" ? inStock : bought;
-    const next = arr.includes(pid) ? arr.filter((x) => x !== pid) : [...arr, pid];
-    saveEvent({ ...ev, bought: kind === "bought" ? next : other.filter((x) => x !== pid), inStock: kind === "stock" ? next : other.filter((x) => x !== pid) });
+    const field = kind === "bought" ? "bought" : "inStock";
+    setShoppingStatus([ev.id], pid, field, !ev[field]?.includes(pid));
   };
   const total = rows.reduce((s, r) => s + r.cost, 0);
   return (
@@ -140,26 +137,25 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
         <p className="shrink-0 text-right text-[11.5px]" style={{ color: SOFT }}>куплено {bought.length} · на складе {inStock.length} · всего {rows.length}</p>
       </div>
       {(() => {
-        const byCategory = new Map<string, typeof rows>();
+        const groups = new Map<string, typeof rows>();
         for (const r of rows) {
-          const cat = r.product.category;
-          const arr = byCategory.get(cat);
-          if (arr) arr.push(r);
-          else byCategory.set(cat, [r]);
+          const place = ev.purchasePlaces?.[r.product.id]?.trim();
+          const key = sortMode === "category" ? r.product.category : place ?? "";
+          const group = groups.get(key);
+          if (group) group.push(r);
+          else groups.set(key, [r]);
         }
-        const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => {
-          const orderA = PRODUCT_CATEGORIES.indexOf(a as any);
-          const orderB = PRODUCT_CATEGORIES.indexOf(b as any);
-          return orderA - orderB;
-        });
-        return sortedCategories.map((category) => {
-          const items = byCategory.get(category)!;
+        const sortedGroups = Array.from(groups.keys()).sort((a, b) => sortMode === "category"
+          ? PRODUCT_CATEGORIES.indexOf(a as any) - PRODUCT_CATEGORIES.indexOf(b as any)
+          : comparePurchasePlaces(a, b));
+        return sortedGroups.map((groupName) => {
+          const items = groups.get(groupName)!;
           const categoryTotal = items.reduce((s, r) => s + r.cost, 0);
           const categoryToBuy = items.filter((r) => !bought.includes(r.product.id) && !inStock.includes(r.product.id));
           return (
-            <div key={category} className="mt-5">
+            <div key={groupName} className="mt-5">
               <div className="mb-2 flex items-center gap-2 border-b-2 pb-1" style={{ borderColor: GOLD }}>
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>{category}</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>{groupName || "Место не указано"}</span>
                 <span className="text-[10px]" style={{ color: SOFT }}>· {items.length} {items.length === 1 ? "позиция" : items.length < 5 ? "позиции" : "позиций"}</span>
                 <span className="h-px grow" style={{ background: RULE }} />
                 <span className="text-[10px]" style={{ color: SOFT }}>к закупке {categoryToBuy.length} · {fmtMoney(categoryTotal)}</span>
@@ -169,6 +165,8 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
                   <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
                     <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Продукт</th>
                     <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Нужно</th>
+                    <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Место покупки</th>
+                    <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>В каком блюде используется</th>
                     <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Цена/ед.</th>
                     <th className="border-b py-1.5 pr-3 text-right font-semibold" style={{ borderColor: RULE }}>Сумма</th>
                     <th className="no-print border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Отметка</th>
@@ -192,15 +190,17 @@ function ShoppingDoc({ ev }: { ev: EventPlan }) {
                               {r.clientNotes && <span className="ml-1 italic">({r.clientNotes})</span>}
                             </div>
                           )}
-                          {r.usedInDishes && r.usedInDishes.length > 0 && (
-                            <div className="mt-1 text-[9px]" style={{ color: SOFT }}>
-                              <span className="font-bold">В блюдах: </span>
-                              {r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ")}
-                            </div>
-                          )}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
                           {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
+                        </td>
+                        <td className="border-b py-1.5 pr-2 text-[9.5px]" style={{ borderColor: RULE }}>
+                          {ev.purchasePlaces?.[r.product.id] || "—"}
+                        </td>
+                        <td className="border-b py-1.5 pr-2 text-[9.5px]" style={{ borderColor: RULE }}>
+                          {r.usedInDishes?.length
+                            ? r.usedInDishes.map((dish) => `${dish.name} — ${dish.amount}`).join(", ")
+                            : "—"}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.product.price)}/{r.product.unit}</td>
                         <td className="border-b py-1.5 pr-3 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(r.cost)}</td>
@@ -294,17 +294,60 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
       ) : (
         <div className="mt-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Организация поминального стола</p>
-          <table className="mt-2 w-full border-collapse text-[11.5px]">
-            <tbody>
-              <tr>
-                <td className="border-b py-2 pr-2" style={{ borderColor: RULE }}>
-                  Блюда по согласованному меню ({sum.portions} порций, {ev.guests} {plural(ev.guests, ["гость", "гостя", "гостей"])})
-                  <p className="mt-0.5 text-[10px]" style={{ color: SOFT }}>детальный состав меню — в приложении к счёту</p>
-                </td>
-                <td className="border-b py-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(sum.foodAfterDiscount)}</td>
-              </tr>
-            </tbody>
-          </table>
+          {(() => {
+            const memorialDishes = sum.dishes.filter((dish) => dish.recipe.category === "Поминки");
+            const additionalDishes = sum.dishes.filter((dish) => dish.recipe.category !== "Поминки");
+            return (
+              <>
+                {memorialDishes.length > 0 && (
+                  <table className="mt-2 w-full border-collapse text-[11.5px]">
+                    <thead>
+                      <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
+                        <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Блюдо</th>
+                        <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Порций</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {memorialDishes.map((dish, index) => (
+                        <tr key={dish.recipe.id} style={{ background: index % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                          <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{dish.recipe.name}</td>
+                          <td className="border-b py-1.5 text-right tabular-nums" style={{ borderColor: RULE }}>{dish.dish.portions}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {additionalDishes.length > 0 && (
+                  <div className="mt-5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: SOFT }}>Дополнительные блюда</p>
+                    <table className="mt-1 w-full border-collapse text-[11.5px]">
+                      <thead>
+                        <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
+                          <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Блюдо</th>
+                          <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Порций</th>
+                          <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Цена за порцию</th>
+                          <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Стоимость</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {additionalDishes.map((dish, index) => (
+                          <tr key={dish.recipe.id} style={{ background: index % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                            <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>
+                              {dish.recipe.name}
+                              {dish.dish.discount > 0 && <span className="ml-2 text-[9px] font-bold" style={{ color: "#ef4444" }}>скидка −{dish.dish.discount}%</span>}
+                            </td>
+                            <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{dish.dish.portions}</td>
+                            <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(dish.clientPerPortion)}</td>
+                            <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(dish.clientPerPortion * dish.dish.portions)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
       {ev.services.length > 0 && (
@@ -370,11 +413,11 @@ function PreviewShell({ title, subtitle, onClose, children, onExportExcel }: { t
   return (
     <div className="print-host fixed inset-0 z-[80] overflow-y-auto bg-[#04100c]/97 scroll-thin print:static print:overflow-visible print:bg-white">
       <div className="no-print sticky top-0 z-10 border-b border-line bg-pine-900/95 backdrop-blur-md">
-        <div className="mx-auto flex h-[54px] max-w-[860px] items-center gap-3 px-4">
+        <div className="mx-auto flex min-h-[54px] max-w-[860px] flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
           <button onClick={onClose} className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream" aria-label="Закрыть"><IcX size={16} /></button>
           <div className="min-w-0 grow"><p className="truncate font-display text-[14px] leading-tight">{title}</p><p className="truncate text-[10.5px] text-sage">{subtitle}</p></div>
-          {onExportExcel && <button onClick={onExportExcel} className="tap flex items-center gap-2 rounded-[11px] border border-line bg-pine-800 px-3.5 py-2 font-display text-[11.5px] font-bold text-sage hover:text-mint">Сохранить в Excel</button>}
-          <button onClick={() => window.print()} className="tap flex items-center gap-2 rounded-[11px] bg-saffron px-3.5 py-2 font-display text-[11.5px] font-bold text-pine-950 hover:brightness-110"><IcPrinter size={15} /> Сохранить в PDF</button>
+          {onExportExcel && <button onClick={onExportExcel} className="tap flex shrink-0 items-center gap-1.5 rounded-[11px] border border-line bg-pine-800 px-2.5 py-2 font-display text-[10.5px] font-bold text-sage hover:text-mint sm:gap-2 sm:px-3.5 sm:text-[11.5px]"><IcDownload size={14} /><span className="hidden min-[400px]:inline">Сохранить в Excel</span><span className="min-[400px]:hidden">Excel</span></button>}
+          <button onClick={() => window.print()} className="tap flex shrink-0 items-center gap-1.5 rounded-[11px] bg-saffron px-2.5 py-2 font-display text-[10.5px] font-bold text-pine-950 hover:brightness-110 sm:gap-2 sm:px-3.5 sm:text-[11.5px]"><IcPrinter size={14} /><span className="hidden min-[400px]:inline">Сохранить в PDF</span><span className="min-[400px]:hidden">PDF</span></button>
         </div>
       </div>
       <div className="mx-auto max-w-[860px] px-3 py-6 md:px-6 print:max-w-none print:px-0 print:py-0">
@@ -385,11 +428,18 @@ function PreviewShell({ title, subtitle, onClose, children, onExportExcel }: { t
   );
 }
 
-export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event: EventPlan; onClose: () => void }) {
+export function EventDocPreview({ kind, event, sortMode = "category", onClose }: { kind: DocKind; event: EventPlan; sortMode?: "category" | "place"; onClose: () => void }) {
   const { state } = useStore();
+  const toast = useToast();
   const titles: Record<DocKind, string> = { chef: "Задание для поваров", shopping: "Сводный список закупок", invoice: "Счёт для клиента" };
   
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx").catch((error: unknown) => {
+      console.error("Не удалось загрузить модуль экспорта Excel.", error);
+      toast("Не удалось создать файл Excel", "del");
+      return null;
+    });
+    if (!XLSX) return;
     const wb = XLSX.utils.book_new();
     const wsData: any[][] = [];
     
@@ -420,11 +470,17 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
         });
       });
     } else if (kind === "shopping") {
-      const rows = buildShopping(event, state.recipes, state.products);
+      const rows = buildShopping(event, state.recipes, state.products).sort((a, b) =>
+        sortMode === "place"
+          ? comparePurchasePlaces(event.purchasePlaces?.[a.product.id], event.purchasePlaces?.[b.product.id])
+            || a.product.name.localeCompare(b.product.name, "ru")
+          : PRODUCT_CATEGORIES.indexOf(a.product.category) - PRODUCT_CATEGORIES.indexOf(b.product.category)
+            || a.product.name.localeCompare(b.product.name, "ru"),
+      );
       wsData.push(["Сводный список закупок"]);
       wsData.push([event.name, fmtDateLong(event.date)]);
       wsData.push([]);
-      wsData.push(["Продукт", "Категория", "Нужно", "Общий вес", "Цена/ед.", "Сумма", "В блюдах"]);
+      wsData.push(["Продукт", "Категория", "Нужно", "Общий вес", "Место покупки", "Цена/ед.", "Сумма", "В блюдах"]);
       
       rows.forEach((r) => {
         const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
@@ -433,6 +489,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
           r.product.category,
           isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount),
           totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
+          event.purchasePlaces?.[r.product.id] ?? "",
           `${fmtMoney(r.product.price)}/${r.product.unit}`,
           fmtMoney(r.cost),
           r.usedInDishes ? r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ") : ""
@@ -441,7 +498,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
       
       const total = rows.reduce((s, r) => s + r.cost, 0);
       wsData.push([]);
-      wsData.push(["", "", "", "", "", "ИТОГО:", fmtMoney(total)]);
+      wsData.push(["", "", "", "", "", "", "ИТОГО:", fmtMoney(total)]);
     } else if (kind === "invoice") {
       const sum = eventSummary(event, state.recipes, state.products);
       wsData.push(["Счёт для клиента"]);
@@ -468,6 +525,29 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
         });
         
         wsData.push(["", "", "Итого блюда:", fmtMoney(sum.foodAfterDiscount)]);
+      } else {
+        const memorialDishes = sum.dishes.filter((dish) => dish.recipe.category === "Поминки");
+        const additionalDishes = sum.dishes.filter((dish) => dish.recipe.category !== "Поминки");
+        wsData.push(["Организация поминального стола"]);
+        if (memorialDishes.length > 0) {
+          wsData.push(["Блюдо", "Порций"]);
+          memorialDishes.forEach((dish) => {
+            wsData.push([dish.recipe.name, dish.dish.portions]);
+          });
+        }
+        if (additionalDishes.length > 0) {
+          wsData.push([]);
+          wsData.push(["Дополнительные блюда"]);
+          wsData.push(["Блюдо", "Порций", "Цена за порцию", "Стоимость"]);
+          additionalDishes.forEach((dish) => {
+            wsData.push([
+              dish.recipe.name + (dish.dish.discount > 0 ? ` (скидка -${dish.dish.discount}%)` : ""),
+              dish.dish.portions,
+              fmtMoney(dish.clientPerPortion),
+              fmtMoney(dish.clientPerPortion * dish.dish.portions),
+            ]);
+          });
+        }
       }
       
       if (event.services.length > 0) {
@@ -491,7 +571,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
   return (
     <PreviewShell title={titles[kind]} subtitle={event.name} onClose={onClose} onExportExcel={exportToExcel}>
       {kind === "chef" && <ChefDoc ev={event} />}
-      {kind === "shopping" && <ShoppingDoc ev={event} />}
+      {kind === "shopping" && <ShoppingDoc ev={event} sortMode={sortMode} />}
       {kind === "invoice" && <InvoiceDoc ev={event} />}
     </PreviewShell>
   );
@@ -499,6 +579,7 @@ export function EventDocPreview({ kind, event, onClose }: { kind: DocKind; event
 
 export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[]; onClose: () => void }) {
   const { state, saveCombinedShoppingList } = useStore();
+  const toast = useToast();
   const [listName, setListName] = useState(`Список закупок ${todayISO()}`);
   const [showNameInput, setShowNameInput] = useState(true);
   
@@ -508,7 +589,13 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
     setShowNameInput(false);
   };
   
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx").catch((error: unknown) => {
+      console.error("Не удалось загрузить модуль экспорта Excel.", error);
+      toast("Не удалось создать файл Excel", "del");
+      return null;
+    });
+    if (!XLSX) return;
     const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
     
     const wsData: any[][] = [
@@ -701,6 +788,7 @@ function CombinedShoppingDoc({ list }: { list: CombinedShoppingList }) {
 
 export function RecipesPricePreview({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { state } = useStore();
+  const toast = useToast();
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showSelection, setShowSelection] = useState(true);
 
@@ -720,7 +808,13 @@ export function RecipesPricePreview({ open, onClose }: { open: boolean; onClose:
 
   const handlePrint = () => { setShowSelection(false); };
   
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx").catch((error: unknown) => {
+      console.error("Не удалось загрузить модуль экспорта Excel.", error);
+      toast("Не удалось создать файл Excel", "del");
+      return null;
+    });
+    if (!XLSX) return;
     const wsData: any[][] = [
       ["Прайс-лист блюд"],
       [`Конечные цены с наценкой · ${fmtDateLong(todayISO())}`],

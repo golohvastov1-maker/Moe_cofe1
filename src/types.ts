@@ -200,6 +200,7 @@ export interface EventPlan {
   clientItems: ClientItem[];
   bought: string[];
   inStock: string[];
+  purchasePlaces?: Record<string, string>;
   comment?: string;
 }
 
@@ -218,6 +219,7 @@ export interface CombinedShoppingItem {
   cost: number;
   bought: boolean;
   inStock: boolean;
+  purchasePlace?: string;
   usedIn: {
     eventId: string;
     eventName: string;

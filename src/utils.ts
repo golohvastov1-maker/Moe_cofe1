@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type {
   EventPlan,
   EventService,
@@ -26,6 +25,14 @@ export const fmtNum = (n: number): string =>
   new Intl.NumberFormat("ru-RU", {
     maximumFractionDigits: n < 10 ? 2 : n < 100 ? 1 : 0,
   }).format(round2(n));
+
+export const comparePurchasePlaces = (a: string | null | undefined, b: string | null | undefined): number => {
+  const placeA = a?.trim() ?? "";
+  const placeB = b?.trim() ?? "";
+  if (!placeA) return placeB ? 1 : 0;
+  if (!placeB) return -1;
+  return placeA.localeCompare(placeB, "ru");
+};
 
 export const parseNum = (s: string): number => {
   const n = parseFloat(s.replace(",", "."));
@@ -399,8 +406,11 @@ export function buildCombinedShoppingList(
       productId,
       amount: data.amount,
       cost: data.cost,
-      bought: existingItem?.bought ?? false,
-      inStock: existingItem?.inStock ?? false,
+      bought: existingItem?.bought ?? events.some((event) => event.bought?.includes(productId)),
+      inStock: existingItem?.inStock ?? events.some((event) => event.inStock?.includes(productId)),
+      purchasePlace: existingItem?.purchasePlace ?? [...new Set(
+        events.map((event) => event.purchasePlaces?.[productId]?.trim()).filter((place): place is string => Boolean(place)),
+      )].join(", "),
       usedIn,
     });
   }
@@ -471,6 +481,7 @@ export async function parsePriceFile(file: File): Promise<PriceRowInput[]> {
   let grid: string[][];
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+    const XLSX = await import("xlsx");
     const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     grid = (XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]).map((r) =>

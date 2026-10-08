@@ -29,6 +29,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setItems((xs) => [...xs.slice(-2), { id, text, kind }]);
     window.setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 2800);
   }, []);
+  useEffect(() => {
+    const onStorageError = () => push("Не удалось сохранить данные. Освободите место в браузере.", "del");
+    window.addEventListener("moe-cafe-storage-error", onStorageError);
+    return () => window.removeEventListener("moe-cafe-storage-error", onStorageError);
+  }, [push]);
   const color = (k: ToastMsg["kind"]) => k === "del" ? "border-coral/40 text-coral" : k === "info" ? "border-glacier/40 text-glacier" : "border-mint/40 text-mint";
   return (
     <ToastCtx.Provider value={push}>
@@ -56,7 +61,7 @@ export function Modal({ open, onClose, title, subtitle, footer, maxW = "max-w-[5
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center md:items-center">
       <div className="anim-fade absolute inset-0 bg-[#04100c]/80 backdrop-blur-[3px]" onClick={onClose} />
-      <div className={`anim-modal relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[20px] border border-line bg-pine-900 shadow-[0_-20px_80px_rgba(0,0,0,0.6)] md:rounded-[20px] ${maxW}`}>
+      <div className={`anim-modal relative flex max-h-[92dvh] w-[calc(100%-16px)] flex-col overflow-hidden rounded-t-[20px] border border-line bg-pine-900 shadow-[0_-20px_80px_rgba(0,0,0,0.6)] md:w-full md:rounded-[20px] ${maxW}`}>
         <div className="border-t-2 border-saffron/70" />
         <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
           <div>
@@ -68,7 +73,7 @@ export function Modal({ open, onClose, title, subtitle, footer, maxW = "max-w-[5
           </button>
         </div>
         <div className="scroll-thin grow overflow-y-auto px-5 pb-2">{children}</div>
-        {footer && <div className="border-t border-line bg-pine-850/80 px-5 py-4 shadow-[0_-12px_30px_rgba(0,0,0,0.25)]">{footer}</div>}
+        {footer && <div className="border-t border-line bg-pine-850/80 px-3 py-3 shadow-[0_-12px_30px_rgba(0,0,0,0.25)] sm:px-5 sm:py-4">{footer}</div>}
       </div>
     </div>
   );

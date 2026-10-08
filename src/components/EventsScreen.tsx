@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { EventPlan, EventType } from "../types";
 import { EVENT_TYPE_STYLE, EVENT_TYPES, PRODUCT_CATEGORIES, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, todayISO, uid } from "../utils";
+import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, todayISO, uid } from "../utils";
 import { DangerConfirm, EmptyState, Field, Modal, Segmented, Stepper, inputCls, useToast } from "./UI";
-import { IcCalendar, IcPlus, IcSearch, IcX, IcDoc } from "./Icons";
+import { IcCalendar, IcPlus, IcSearch, IcX, IcDoc, IcDownload, IcPrinter } from "./Icons";
 import { MultiShoppingPreview } from "./PrintDocs";
 import type { CombinedShoppingList } from "../types";
 
@@ -32,9 +32,12 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
         <button onClick={() => { setEditing(null); setOpen(true); }} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Мероприятие</button>
       </header>
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[190px] grow sm:max-w-[260px]"><IcSearch size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sage" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Название…" className={inputCls + " pl-10"} /></div>
+        <div className="relative w-full grow sm:min-w-[190px] sm:max-w-[260px]"><IcSearch size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sage" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Название…" className={inputCls + " pl-10"} /></div>
         <Segmented options={[{ value: "все", label: "Все" }, ...EVENT_TYPES.map((t) => ({ value: t, label: t }))]} value={typeFilter} onChange={setTypeFilter} />
-        <div className="flex items-center gap-1.5 text-[12px] text-sage"><span className="hidden sm:inline">с</span><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls + " w-[138px] py-2 text-[12.5px]"} /><span>по</span><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls + " w-[138px] py-2 text-[12.5px]"} /></div>
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:items-center sm:gap-1.5">
+          <label className="min-w-0 text-[10px] font-semibold text-sage sm:flex sm:items-center sm:gap-1.5 sm:text-[12px]"><span>С</span><input aria-label="Дата начала" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls + " mt-1 min-w-0 py-2 text-[12px] sm:mt-0 sm:w-[138px] sm:text-[12.5px]"} /></label>
+          <label className="min-w-0 text-[10px] font-semibold text-sage sm:flex sm:items-center sm:gap-1.5 sm:text-[12px]"><span>По</span><input aria-label="Дата окончания" type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls + " mt-1 min-w-0 py-2 text-[12px] sm:mt-0 sm:w-[138px] sm:text-[12.5px]"} /></label>
+        </div>
         {hasFilters && <button onClick={() => { setQ(""); setTypeFilter("все"); setFrom(""); setTo(""); }} className="tap rounded-full border border-line px-3 py-1.5 text-[11.5px] font-semibold text-sage hover:text-coral">Сбросить</button>}
       </div>
       {state.events.length === 0 ? (<EmptyState icon={<IcCalendar size={24} />} title="Мероприятий пока нет" text="Создайте событие." action={<button onClick={() => { setEditing(null); setOpen(true); }} className="tap rounded-full bg-saffron px-5 py-2.5 font-display text-[12px] font-bold text-pine-950">Новое мероприятие</button>} />) : filtered.length === 0 ? (<p className="reveal mt-10 text-center text-[13px] text-sage">В выбранном периоде событий нет</p>) : (
@@ -64,7 +67,7 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
         <div className="anim-modal fixed inset-x-0 bottom-[76px] z-40 mx-auto flex w-[calc(100%-24px)] max-w-[600px] items-center gap-2.5 rounded-[16px] border border-saffron/30 bg-pine-850/95 px-4 py-3 shadow-[0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-md md:bottom-6">
           <p className="min-w-0 grow truncate text-[12.5px] font-semibold text-cream">Выбрано: {selectedEvents.length} <span className="font-normal text-sage">{selectedEvents.length === 1 ? "— отметьте ещё одно" : plural(selectedEvents.length, ["мероприятие", "мероприятия", "мероприятий"])}</span></p>
           <button onClick={() => setSelected([])} aria-label="Сбросить выбор" className="tap grid h-9 w-9 shrink-0 place-items-center rounded-[11px] border border-line text-sage hover:text-coral"><IcX size={15} /></button>
-          <button onClick={() => setMultiOpen(true)} disabled={selectedEvents.length < 2} className="tap flex shrink-0 items-center gap-2 rounded-[12px] bg-saffron px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 hover:brightness-110 disabled:opacity-35">Общий список закупок</button>
+          <button onClick={() => setMultiOpen(true)} disabled={selectedEvents.length < 2} className="tap flex shrink-0 items-center gap-2 rounded-[12px] bg-saffron px-3 py-2.5 font-display text-[11px] font-bold text-pine-950 hover:brightness-110 disabled:opacity-35 sm:px-4 sm:text-[12px]"><span className="sm:hidden">Общий список</span><span className="hidden sm:inline">Общий список закупок</span></button>
         </div>
       )}
       {state.combinedShoppingLists.length > 0 && (
@@ -105,65 +108,108 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
 }
 
 function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingList; onClose: () => void }) {
-  const { state, saveCombinedShoppingList, saveEvent } = useStore();
+  const { state, setShoppingStatus, setPurchasePlace } = useStore();
   const toast = useToast();
-  
+  const [sortMode, setSortMode] = useState<"category" | "place">("category");
+  const currentList = state.combinedShoppingLists.find((entry) => entry.id === list.id) ?? list;
+
   const toggle = (productId: string, field: "bought" | "inStock") => {
-    const updatedItems = list.items.map((item) => {
-      if (item.productId === productId) {
-        if (field === "bought") {
-          return { ...item, bought: !item.bought, inStock: false };
-        } else {
-          return { ...item, inStock: !item.inStock, bought: false };
-        }
-      }
-      return item;
-    });
-    
-    saveCombinedShoppingList({ ...list, items: updatedItems, updatedAt: todayISO() });
-    
-    // Синхронизируем с мероприятиями
-    list.eventIds.forEach((eventId) => {
-      const event = state.events.find((e) => e.id === eventId);
-      if (event) {
-        const item = updatedItems.find((i) => i.productId === productId);
-        if (item) {
-          const updatedEvent = {
-            ...event,
-            bought: item.bought ? [...new Set([...(event.bought ?? []), productId])] : (event.bought ?? []).filter((id) => id !== productId),
-            inStock: item.inStock ? [...new Set([...(event.inStock ?? []), productId])] : (event.inStock ?? []).filter((id) => id !== productId),
-          };
-          saveEvent(updatedEvent);
-        }
-      }
-    });
-    
+    const item = currentList.items.find((entry) => entry.productId === productId);
+    if (!item) return;
+    const checked = !item[field];
+    const eventIds = item.usedIn.length > 0
+      ? item.usedIn.map((usage) => usage.eventId)
+      : currentList.eventIds;
+    setShoppingStatus(eventIds, productId, field, checked);
     toast("Отметка обновлена");
   };
+  const updatePlace = (productId: string, place: string) => {
+    const item = currentList.items.find((entry) => entry.productId === productId);
+    if (!item) return;
+    const eventIds = item.usedIn.length > 0
+      ? item.usedIn.map((usage) => usage.eventId)
+      : currentList.eventIds;
+    setPurchasePlace(eventIds, productId, place);
+  };
   
-  const total = list.items.reduce((s, item) => s + item.cost, 0);
-  const boughtCount = list.items.filter((i) => i.bought).length;
-  const inStockCount = list.items.filter((i) => i.inStock).length;
+  const total = currentList.items.reduce((s, item) => s + item.cost, 0);
+  const boughtCount = currentList.items.filter((i) => i.bought).length;
+  const inStockCount = currentList.items.filter((i) => i.inStock).length;
+  const orderedItems = sortMode === "place"
+    ? [...currentList.items].sort((a, b) =>
+        comparePurchasePlaces(a.purchasePlace, b.purchasePlace) || (state.products.find((product) => product.id === a.productId)?.name ?? "")
+          .localeCompare(state.products.find((product) => product.id === b.productId)?.name ?? "", "ru"),
+      )
+    : currentList.items;
+  const exportToExcel = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const rows = orderedItems.flatMap((item) => {
+        const product = state.products.find((entry) => entry.id === item.productId);
+        if (!product) return [];
+        const status = item.bought ? "Куплено" : item.inStock ? "На складе" : "К закупке";
+        const usedIn = item.usedIn.map((usage) =>
+          `${usage.eventName}: ${usage.dishes.map((dish) => dish.recipeName).join(", ")}`,
+        ).join("; ");
+        return [[
+          product.name,
+          product.category,
+          isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount),
+          `${fmtMoney(product.price)}/${product.unit}`,
+          fmtMoney(item.cost),
+          item.purchasePlace ?? "",
+          status,
+          usedIn,
+        ]];
+      });
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        [currentList.name],
+        [`Объединено мероприятий: ${currentList.eventIds.length}`],
+        [],
+        ["Продукт", "Категория", "Количество", "Цена за единицу", "Стоимость", "Место покупки", "Статус", "Мероприятие и блюда"],
+        ...rows,
+        [],
+        ["", "", "", "Итого:", fmtMoney(total), "", "", ""],
+      ]);
+      worksheet["!cols"] = [
+        { wch: 28 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 60 },
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Общий список");
+      XLSX.writeFile(workbook, `${currentList.name.replace(/[\\/:*?"<>|]/g, "-")}.xlsx`);
+    } catch (error) {
+      console.error("Не удалось экспортировать общий список закупок в Excel.", error);
+      toast("Не удалось сохранить файл Excel", "del");
+    }
+  };
   
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#04100c]/97 backdrop-blur-md">
-      <div className="w-full max-w-[900px] max-h-[90vh] overflow-y-auto rounded-[16px] border border-line bg-pine-900 shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-pine-900 px-6 py-4">
+    <div className="print-host print-list-host fixed inset-0 z-[80] flex items-center justify-center bg-[#04100c]/97 backdrop-blur-md">
+      <div className="print-list-modal w-full max-w-[900px] max-h-[90vh] overflow-y-auto rounded-[16px] border border-line bg-pine-900 shadow-2xl print:max-h-none print:max-w-none print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
+        <div className="no-print sticky top-0 z-10 flex items-center justify-between border-b border-line bg-pine-900 px-6 py-4">
           <div>
-            <h2 className="font-display text-[18px] text-cream">{list.name}</h2>
+            <h2 className="font-display text-[18px] text-cream">{currentList.name}</h2>
             <p className="mt-1 text-[12px] text-sage">
-              {list.eventIds.length} {plural(list.eventIds.length, ["мероприятие", "мероприятия", "мероприятий"])} · {list.items.length} позиций
+              {currentList.eventIds.length} {plural(currentList.eventIds.length, ["мероприятие", "мероприятия", "мероприятий"])} · {currentList.items.length} позиций
             </p>
           </div>
-          <button onClick={onClose} className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream">
-            <IcX size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => void exportToExcel()} className="tap flex items-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[11px] font-semibold text-sage hover:text-mint">
+              <IcDownload size={14} /> <span className="hidden sm:inline">Сохранить в Excel</span>
+            </button>
+            <button onClick={() => window.print()} className="tap flex items-center gap-1.5 rounded-[10px] bg-saffron px-3 py-2 text-[11px] font-semibold text-pine-950 hover:brightness-110">
+              <IcPrinter size={14} /> <span className="hidden sm:inline">Сохранить в PDF</span>
+            </button>
+            <button onClick={onClose} aria-label="Закрыть" className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream">
+              <IcX size={16} />
+            </button>
+          </div>
         </div>
-        <div className="p-6">
+        <div className="no-print p-6">
           <div className="mb-4 grid grid-cols-3 gap-3">
             <div className="rounded-[12px] border border-line bg-pine-800 p-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-sage">Всего</p>
-              <p className="mt-1 font-display text-[20px] text-cream">{list.items.length}</p>
+              <p className="mt-1 font-display text-[20px] text-cream">{currentList.items.length}</p>
             </div>
             <div className="rounded-[12px] border border-mint/30 bg-mint/5 p-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-mint">Куплено</p>
@@ -174,31 +220,31 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
               <p className="mt-1 font-display text-[20px] text-glacier">{inStockCount}</p>
             </div>
           </div>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-sage">Итого к закупке: <span className="font-display font-bold text-saffron">{fmtMoney(total)}</span></p>
+            <Segmented options={[{ value: "category", label: "По категориям" }, { value: "place", label: "По месту покупки" }]} value={sortMode} onChange={setSortMode} />
           </div>
           {(() => {
-            const byCategory = new Map<string, typeof list.items>();
-            for (const item of list.items) {
+            const groups = new Map<string, typeof currentList.items>();
+            for (const item of currentList.items) {
               const product = state.products.find((p) => p.id === item.productId);
               if (!product) continue;
-              const cat = product.category;
-              const arr = byCategory.get(cat);
-              if (arr) arr.push(item);
-              else byCategory.set(cat, [item]);
+              const place = item.purchasePlace?.trim();
+              const key = sortMode === "category" ? product.category : place ?? "";
+              const group = groups.get(key);
+              if (group) group.push(item);
+              else groups.set(key, [item]);
             }
-            const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => {
-              const orderA = PRODUCT_CATEGORIES.indexOf(a as any);
-              const orderB = PRODUCT_CATEGORIES.indexOf(b as any);
-              return orderA - orderB;
-            });
-            return sortedCategories.map((category) => {
-              const items = byCategory.get(category)!;
+            const sortedGroups = Array.from(groups.keys()).sort((a, b) => sortMode === "category"
+              ? PRODUCT_CATEGORIES.indexOf(a as any) - PRODUCT_CATEGORIES.indexOf(b as any)
+              : comparePurchasePlaces(a, b));
+            return sortedGroups.map((groupName) => {
+              const items = groups.get(groupName)!;
               const categoryTotal = items.reduce((s, item) => s + item.cost, 0);
               return (
-                <div key={category} className="mt-5">
+                <div key={groupName} className="mt-5">
                   <div className="mb-2 flex items-center gap-2 border-b border-line pb-1">
-                    <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-mint">{category}</span>
+                    <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-mint">{groupName || "Место не указано"}</span>
                     <span className="text-[11px] text-sage">· {items.length} поз.</span>
                     <span className="h-px grow bg-line" />
                     <span className="text-[11px] text-sage">{fmtMoney(categoryTotal)}</span>
@@ -233,6 +279,13 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
                               </div>
                             )}
                           </div>
+                          <input
+                            aria-label={`Где купить: ${product.name}`}
+                            value={item.purchasePlace ?? ""}
+                            onChange={(event) => updatePlace(item.productId, event.target.value)}
+                            placeholder="Где купить?"
+                            className={inputCls + " w-full max-w-[180px] py-1.5 text-[12px]"}
+                          />
                           <button
                             onClick={() => toggle(item.productId, "inStock")}
                             className={`tap rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors ${item.inStock ? "border-glacier/50 bg-glacier/15 text-glacier" : "border-line text-sage hover:text-glacier"}`}
@@ -253,6 +306,60 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
               );
             });
           })()}
+        </div>
+        <div id="print-root" className="print-list-content hidden print:block px-8 py-8" style={{ background: "#fefdfb", color: "#2d2420" }}>
+          <h1 className="font-display text-[22px]">{currentList.name}</h1>
+          <p className="mt-1 text-[11px]">
+            Общий список закупок · {currentList.eventIds.length} {plural(currentList.eventIds.length, ["мероприятие", "мероприятия", "мероприятий"])} · {currentList.items.length} позиций
+          </p>
+          <table className="mt-5 w-full border-collapse text-[10px]">
+            <thead>
+              <tr style={{ background: "#f5f0e8" }}>
+                {["Продукт", "Категория", "Количество", "Цена за единицу", "Стоимость", "Место покупки", "Статус", "Мероприятие и блюда"].map((title) => (
+                  <th key={title} className="border-b p-2 text-left font-semibold" style={{ borderColor: "#e0d5c8" }}>{title}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {orderedItems.map((item) => {
+                const product = state.products.find((entry) => entry.id === item.productId);
+                if (!product) return null;
+                return (
+                  <tr key={item.productId}>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{product.name}</td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{product.category}</td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>
+                      {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount)}
+                    </td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{fmtMoney(product.price)}/{product.unit}</td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{fmtMoney(item.cost)}</td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{item.purchasePlace || "—"}</td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>
+                      {item.bought ? "Куплено" : item.inStock ? "На складе" : "К закупке"}
+                    </td>
+                    <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>
+                      {item.usedIn.length > 0 ? item.usedIn.map((usage) => (
+                        <div key={usage.eventId} className="mb-1 last:mb-0">
+                          <span className="font-semibold">{usage.eventName}:</span>
+                          {" "}
+                          {usage.dishes.map((dish) =>
+                            `${dish.recipeName} (${isWeighed(product.unit) ? amountLabel(dish.amount, product.unit) : pieceAmountLabel(product, dish.amount)})`,
+                          ).join(", ")}
+                        </div>
+                      )) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr>
+                <td colSpan={4} className="p-2 text-right font-bold">Итого:</td>
+                <td className="p-2 font-bold">{fmtMoney(total)}</td>
+                <td />
+                <td />
+                <td />
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -280,7 +387,7 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
   const valid = name.trim().length > 0 && date !== "";
   const save = () => {
     if (!valid) return;
-    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes: editing?.dishes ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], comment: editing?.comment });
+    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes: editing?.dishes ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], purchasePlaces: editing?.purchasePlaces ?? {}, comment: editing?.comment });
     toast(editing ? "Мероприятие обновлено" : "Мероприятие создано"); onClose();
   };
   return (

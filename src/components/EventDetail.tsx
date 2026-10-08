@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import type { Category, DocKind, EventPlan, IngredientRow } from "../types";
 import { EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildShopping, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, todayISO, uid } from "../utils";
+import { amountLabel, buildShopping, comparePurchasePlaces, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, todayISO, uid } from "../utils";
 import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, textareaCls, useCountUp, useToast } from "./UI";
 import { IcBook, IcBriefcase, IcCart, IcChevronLeft, IcComment, IcDoc, IcPencil, IcPlus, IcReset, IcRuble, IcSearch, IcUsers, IcX } from "./Icons";
 import { EventDocPreview } from "./PrintDocs";
@@ -24,6 +24,7 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
   const [tab, setTab] = useState<TabId>("menu");
   const [editOpen, setEditOpen] = useState(false);
   const [docKind, setDocKind] = useState<DocKind | null>(null);
+  const [docSortMode, setDocSortMode] = useState<"category" | "place">("category");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editDishId, setEditDishId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "price" | "portions">("name");
@@ -67,13 +68,13 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
         {tab === "menu" && <MenuTab ev={ev} onAdd={() => setPickerOpen(true)} onEditDish={setEditDishId} sortBy={sortBy} setSortBy={setSortBy} />}
         {tab === "client" && <ClientItemsTab ev={ev} />}
         {tab === "services" && <ServicesTab ev={ev} />}
-        {tab === "docs" && <DocsTab ev={ev} onOpenDoc={setDocKind} />}
+        {tab === "docs" && <DocsTab ev={ev} onOpenDoc={(kind, mode) => { setDocSortMode(mode); setDocKind(kind); }} />}
         {tab === "comment" && <CommentTab ev={ev} />}
       </div>
       <EventSheet open={editOpen} onClose={() => setEditOpen(false)} editing={ev} />
       <AddDishPicker open={pickerOpen} onClose={() => setPickerOpen(false)} ev={ev} onAdd={(recipeId) => { saveEvent({ ...ev, dishes: [...ev.dishes, { recipeId, portions: Math.max(1, ev.guests), overrides: null, discount: 0 }] }); setPickerOpen(false); toast("Блюдо добавлено в меню"); }} />
       <IngredientEditor key={editDishId ?? "none"} ev={ev} recipeId={editDishId} onClose={() => setEditDishId(null)} />
-      {docKind && <EventDocPreview kind={docKind} event={ev} onClose={() => setDocKind(null)} />}
+      {docKind && <EventDocPreview kind={docKind} event={ev} sortMode={docSortMode} onClose={() => setDocKind(null)} />}
     </section>
   );
 }
@@ -388,45 +389,15 @@ function CustomServiceModal({ open, onClose, onAdd }: { open: boolean; onClose: 
   );
 }
 
-function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind) => void }) {
-  const { state, saveEvent, saveCombinedShoppingList } = useStore();
+function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sortMode: "category" | "place") => void }) {
+  const { state, setShoppingStatus, setPurchasePlace } = useStore();
   const toast = useToast();
+  const [sortMode, setSortMode] = useState<"category" | "place">("category");
   const shopping = buildShopping(ev, state.recipes, state.products);
   const bought = new Set(ev.bought ?? []);
   const inStock = new Set(ev.inStock ?? []);
-  const toggle = (list: "bought" | "inStock", pid: string) => {
-    const cur = new Set(ev[list] ?? []);
-    if (cur.has(pid)) cur.delete(pid);
-    else { cur.add(pid); const other = list === "bought" ? "inStock" : "bought"; const otherSet = new Set(ev[other] ?? []); otherSet.delete(pid); saveEvent({ ...ev, [list]: [...cur], [other]: [...otherSet] }); 
-    
-    // Синхронизируем с общими списками закупок
-    state.combinedShoppingLists.forEach((csl) => {
-      if (csl.eventIds.includes(ev.id)) {
-        const updatedItems = csl.items.map((item) => {
-          if (item.productId === pid) {
-            return { ...item, [list]: !item[list], [other]: false };
-          }
-          return item;
-        });
-        saveCombinedShoppingList({ ...csl, items: updatedItems, updatedAt: todayISO() });
-      }
-    });
-    
-    return; }
-    saveEvent({ ...ev, [list]: [...cur] });
-    
-    // Синхронизируем с общими списками закупок
-    state.combinedShoppingLists.forEach((csl) => {
-      if (csl.eventIds.includes(ev.id)) {
-        const updatedItems = csl.items.map((item) => {
-          if (item.productId === pid) {
-            return { ...item, [list]: false };
-          }
-          return item;
-        });
-        saveCombinedShoppingList({ ...csl, items: updatedItems, updatedAt: todayISO() });
-      }
-    });
+  const toggle = (field: "bought" | "inStock", productId: string) => {
+    setShoppingStatus([ev.id], productId, field, !ev[field]?.includes(productId));
   };
   const toBuy = shopping.filter((r) => !bought.has(r.product.id) && !inStock.has(r.product.id));
   const toBuySum = toBuy.reduce((s, r) => s + r.cost, 0);
@@ -438,25 +409,63 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind) => 
   return (
     <div className="space-y-6">
       <div className="grid gap-2.5 sm:grid-cols-3">
-        {DOCS.map((d, i) => (<button key={d.kind} onClick={() => onOpenDoc(d.kind)} className="reveal card-hover rounded-[16px] border border-line bg-pine-800 p-4 text-left" style={{ animationDelay: `${i * 60}ms` }}><d.Icon size={20} className="text-saffron" /><p className="mt-2.5 font-display text-[14px] leading-snug">{d.title}</p><p className="mt-1 text-[11px] leading-relaxed text-sage">{d.desc}</p></button>))}
+        {DOCS.map((d, i) => (<button key={d.kind} onClick={() => onOpenDoc(d.kind, sortMode)} className="reveal card-hover rounded-[16px] border border-line bg-pine-800 p-4 text-left" style={{ animationDelay: `${i * 60}ms` }}><d.Icon size={20} className="text-saffron" /><p className="mt-2.5 font-display text-[14px] leading-snug">{d.title}</p><p className="mt-1 text-[11px] leading-relaxed text-sage">{d.desc}</p></button>))}
       </div>
       <div className="reveal">
-        <div className="mb-2.5 flex items-baseline justify-between"><h2 className="flex items-center gap-2 font-display text-[15px]"><IcCart size={16} className="text-mint" /> Список покупок</h2>{shopping.length > 0 && <span className="text-[11px] font-semibold text-sage">к закупке {toBuy.length} из {shopping.length} · {fmtMoney(toBuySum)}</span>}</div>
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 font-display text-[15px]"><IcCart size={16} className="text-mint" /> Список покупок</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {shopping.length > 0 && <span className="text-[11px] font-semibold text-sage">к закупке {toBuy.length} из {shopping.length} · {fmtMoney(toBuySum)}</span>}
+            <Segmented options={[{ value: "category", label: "По категориям" }, { value: "place", label: "По месту покупки" }]} value={sortMode} onChange={setSortMode} />
+          </div>
+        </div>
         {shopping.length === 0 ? (<p className="rounded-[12px] border border-dashed border-pine-500/70 px-4 py-4 text-center text-[12.5px] text-sage">Появится автоматически из ингредиентов всех блюд меню</p>) : (
           <div className="space-y-5">
             {(() => {
-              const byCategory = new Map<string, typeof shopping>();
-              for (const r of shopping) { const cat = r.product.category; const arr = byCategory.get(cat); if (arr) arr.push(r); else byCategory.set(cat, [r]); }
-              const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => { const orderA = PRODUCT_CATEGORIES.indexOf(a as any); const orderB = PRODUCT_CATEGORIES.indexOf(b as any); return orderA - orderB; });
-              return sortedCategories.map((category) => {
-                const items = byCategory.get(category)!;
+              const groups = new Map<string, typeof shopping>();
+              for (const row of shopping) {
+                const place = ev.purchasePlaces?.[row.product.id]?.trim();
+                const key = sortMode === "category" ? row.product.category : place ?? "";
+                const group = groups.get(key);
+                if (group) group.push(row);
+                else groups.set(key, [row]);
+              }
+              const sortedGroups = Array.from(groups.keys()).sort((a, b) => sortMode === "category"
+                ? PRODUCT_CATEGORIES.indexOf(a as any) - PRODUCT_CATEGORIES.indexOf(b as any)
+                : comparePurchasePlaces(a, b));
+              return sortedGroups.map((groupName) => {
+                const items = groups.get(groupName)!;
                 const categoryTotal = items.reduce((s, r) => s + r.cost, 0);
                 const categoryToBuy = items.filter((r) => !bought.has(r.product.id) && !inStock.has(r.product.id));
                 return (
-                  <div key={category} className="reveal">
-                    <div className="mb-2.5 flex items-center gap-2.5"><span className="h-2 w-2 rounded-full bg-mint" /><h3 className="font-display text-[13px] font-bold text-mint">{category}</h3><span className="text-[11px] font-semibold text-sage">{items.length} {items.length === 1 ? "позиция" : items.length < 5 ? "позиции" : "позиций"}</span><span className="h-px grow bg-line" /><span className="hidden text-[11px] text-sage sm:inline">к закупке {categoryToBuy.length} · {fmtMoney(categoryTotal)}</span></div>
+                  <div key={groupName} className="reveal">
+                    <div className="mb-2.5 flex items-center gap-2.5"><span className="h-2 w-2 rounded-full bg-mint" /><h3 className="font-display text-[13px] font-bold text-mint">{groupName || "Место не указано"}</h3><span className="text-[11px] font-semibold text-sage">{items.length} {items.length === 1 ? "позиция" : items.length < 5 ? "позиции" : "позиций"}</span><span className="h-px grow bg-line" /><span className="hidden text-[11px] text-sage sm:inline">к закупке {categoryToBuy.length} · {fmtMoney(categoryTotal)}</span></div>
                     <div className="space-y-2">
-                      {items.map((r) => { const isBought = bought.has(r.product.id); const isStock = inStock.has(r.product.id); const hasClientItems = (r.clientAmount ?? 0) > 0; const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null); return (<div key={r.product.id} className={`reveal flex flex-wrap items-center gap-2.5 rounded-[13px] border px-3.5 py-2.5 transition-all ${isBought || isStock ? "border-mint/25 bg-mint/5 opacity-80" : "border-line bg-pine-800"}`}><div className="min-w-0 grow"><p className={`truncate text-[13px] font-semibold text-cream ${isBought || isStock ? "text-sage" : ""}`}>{r.product.name}</p><p className="text-[10.5px] text-sage">{isPieceUnit(r.product.unit) ? pieceAmountLabel(r.product, r.amount) : amountLabel(r.amount, r.product.unit)}{totalWeight !== null && <span className="ml-1">· общий вес {totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`}</span>} · {fmtMoney(r.cost)}</p>{hasClientItems && <p className="mt-1 text-[10px] text-glacier"><span className="font-semibold">Клиент:</span> {isPieceUnit(r.product.unit) ? pieceAmountLabel(r.product, r.clientAmount!) : amountLabel(r.clientAmount!, r.product.unit)}{r.clientNotes && <span className="ml-1 text-sage">· {r.clientNotes}</span>}</p>}{r.usedInDishes && r.usedInDishes.length > 0 && <p className="mt-1 text-[10px] text-sage"><span className="font-semibold">В блюдах:</span> {r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ")}</p>}</div><button onClick={() => toggle("inStock", r.product.id)} className={`tap rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors ${isStock ? "border-glacier/50 bg-glacier/15 text-glacier" : "border-line text-sage hover:text-glacier"}`}>есть на складе</button><button onClick={() => toggle("bought", r.product.id)} className={`tap rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors ${isBought ? "border-mint/50 bg-mint/15 text-mint" : "border-line text-sage hover:text-mint"}`}>куплено</button></div>); })}
+                      {items.map((r) => {
+                        const isBought = bought.has(r.product.id);
+                        const isStock = inStock.has(r.product.id);
+                        const hasClientItems = (r.clientAmount ?? 0) > 0;
+                        const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
+                        return (
+                          <div key={r.product.id} className={`reveal flex flex-wrap items-center gap-2.5 rounded-[13px] border px-3.5 py-2.5 transition-all ${isBought || isStock ? "border-mint/25 bg-mint/5 opacity-80" : "border-line bg-pine-800"}`}>
+                            <div className="min-w-0 grow">
+                              <p className={`truncate text-[13px] font-semibold text-cream ${isBought || isStock ? "text-sage" : ""}`}>{r.product.name}</p>
+                              <p className="text-[10.5px] text-sage">{isPieceUnit(r.product.unit) ? pieceAmountLabel(r.product, r.amount) : amountLabel(r.amount, r.product.unit)}{totalWeight !== null && <span className="ml-1">· общий вес {totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`}</span>} · {fmtMoney(r.cost)}</p>
+                              {hasClientItems && <p className="mt-1 text-[10px] text-glacier"><span className="font-semibold">Клиент:</span> {isPieceUnit(r.product.unit) ? pieceAmountLabel(r.product, r.clientAmount!) : amountLabel(r.clientAmount!, r.product.unit)}{r.clientNotes && <span className="ml-1 text-sage">· {r.clientNotes}</span>}</p>}
+                              {r.usedInDishes && r.usedInDishes.length > 0 && <p className="mt-1 text-[10px] text-sage"><span className="font-semibold">В блюдах:</span> {r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ")}</p>}
+                            </div>
+                            <input
+                              aria-label={`Где купить: ${r.product.name}`}
+                              value={ev.purchasePlaces?.[r.product.id] ?? ""}
+                              onChange={(event) => setPurchasePlace([ev.id], r.product.id, event.target.value)}
+                              placeholder="Где купить?"
+                              className={inputCls + " w-full max-w-[180px] py-1.5 text-[12px]"}
+                            />
+                            <button onClick={() => toggle("inStock", r.product.id)} className={`tap rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors ${isStock ? "border-glacier/50 bg-glacier/15 text-glacier" : "border-line text-sage hover:text-glacier"}`}>есть на складе</button>
+                            <button onClick={() => toggle("bought", r.product.id)} className={`tap rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors ${isBought ? "border-mint/50 bg-mint/15 text-mint" : "border-line text-sage hover:text-mint"}`}>куплено</button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

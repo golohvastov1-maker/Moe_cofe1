@@ -27,6 +27,14 @@ html, body {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
 @keyframes glow-drift {
   0%, 100% { transform: translate(0, 0) scale(1); }
   50% { transform: translate(-20px, 20px) scale(1.1); }
@@ -116,7 +124,17 @@ html, body {
   scrollbar-width: none;
 }
 
+@media screen and (max-width: 639px) {
+  .print-sheet {
+    overflow-x: auto;
+  }
+}
+
 @media print {
+  html, body {
+    overflow: visible !important;
+  }
+
   @page {
     size: A4;
     margin: 10mm;
@@ -153,6 +171,80 @@ html, body {
     width: 100% !important;
     overflow: visible !important;
     background: white !important;
+  }
+
+  .print-list-host {
+    display: block !important;
+  }
+
+  .print-tech-card-host {
+    display: block !important;
+  }
+
+  .print-tech-card-modal {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+
+  .print-tech-card-content {
+    display: block !important;
+    width: 100% !important;
+    overflow: visible !important;
+    break-before: auto !important;
+    page-break-before: auto !important;
+  }
+
+  .print-tech-card-content h1,
+  .print-tech-card-content p {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-list-modal {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+
+  .print-list-content {
+    display: block !important;
+    break-before: auto !important;
+    page-break-before: auto !important;
+  }
+
+  .print-list-content h1,
+  .print-list-content p {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-list-content table {
+    width: 100%;
+    break-before: avoid;
+    page-break-before: avoid;
+    page-break-inside: auto;
+  }
+
+  .print-list-content thead {
+    display: table-header-group;
+  }
+
+  .print-list-content tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   
   html, body {

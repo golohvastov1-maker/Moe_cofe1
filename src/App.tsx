@@ -1,14 +1,18 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { Tab } from "./types";
 import { StoreProvider } from "./store";
 import { ToastProvider } from "./components/UI";
-import { Dashboard } from "./components/Dashboard";
-import { ProductsScreen, ServicesScreen, RequisitesScreen } from "./components/Screens";
-import { RecipesScreen } from "./components/RecipesScreen";
-import { EventsScreen } from "./components/EventsScreen";
-import { EventDetail } from "./components/EventDetail";
-import { TasksScreen } from "./components/TasksScreen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BrandMark, IcBasket, IcBriefcase, IcCalendar, IcDash, IcDoc, IcHat, IcTask } from "./components/Icons";
+
+const Dashboard = lazy(() => import("./components/Dashboard").then((module) => ({ default: module.Dashboard })));
+const ProductsScreen = lazy(() => import("./components/Screens").then((module) => ({ default: module.ProductsScreen })));
+const ServicesScreen = lazy(() => import("./components/Screens").then((module) => ({ default: module.ServicesScreen })));
+const RequisitesScreen = lazy(() => import("./components/Screens").then((module) => ({ default: module.RequisitesScreen })));
+const RecipesScreen = lazy(() => import("./components/RecipesScreen").then((module) => ({ default: module.RecipesScreen })));
+const EventsScreen = lazy(() => import("./components/EventsScreen").then((module) => ({ default: module.EventsScreen })));
+const EventDetail = lazy(() => import("./components/EventDetail").then((module) => ({ default: module.EventDetail })));
+const TasksScreen = lazy(() => import("./components/TasksScreen").then((module) => ({ default: module.TasksScreen })));
 
 const NAV: { id: Tab; label: string; short: string; Icon: typeof IcDash }[] = [
   { id: "dashboard", label: "Дашборд", short: "Главная", Icon: IcDash },
@@ -44,26 +48,28 @@ function AppInner() {
         <div className="m-3 rounded-[14px] border border-line bg-pine-800/50 p-3.5"><p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-sage">Локальная база</p><p className="mt-1.5 text-[11px] leading-relaxed text-sage">Все данные хранятся в этом браузере.</p></div>
       </aside>
       <div className="sticky top-0 z-30 border-b border-line bg-gradient-to-b from-pine-900/98 to-pine-950/95 backdrop-blur-xl md:hidden">
-        <div className="flex h-[54px] items-center gap-2.5 px-5"><BrandMark size={24} /><span className="font-display text-[15px] text-cream">Мое кафе</span><span className="ml-auto rounded-full border border-saffron/30 bg-saffron/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-saffron">{NAV.find((n) => n.id === tab)?.label}</span></div>
+        <div className="flex min-h-[54px] items-center gap-2.5 px-3 sm:px-5"><BrandMark size={24} /><span className="font-display text-[15px] text-cream">Мое кафе</span><span className="ml-auto max-w-[45%] truncate rounded-full border border-saffron/30 bg-saffron/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-saffron">{NAV.find((n) => n.id === tab)?.short}</span></div>
       </div>
       <main className="relative bg-pine-950 md:pl-[224px]">
         <div className="mx-auto min-h-dvh max-w-[1180px] pb-24 md:pb-10">
-          {tab === "dashboard" && <Dashboard onOpenEvent={openEvent} onGoTab={goTab} />}
-          {tab === "events" && (eventId ? <EventDetail id={eventId} onBack={() => setEventId(null)} /> : <EventsScreen onOpen={setEventId} />)}
-          {tab === "tasks" && <TasksScreen onOpenEvent={openEvent} />}
-          {tab === "recipes" && <RecipesScreen />}
-          {tab === "products" && <ProductsScreen />}
-          {tab === "services" && <ServicesScreen />}
-          {tab === "requisites" && <RequisitesScreen />}
+          <Suspense fallback={<div role="status" className="px-5 py-10 text-center text-[13px] text-sage md:px-8">Загрузка раздела…</div>}>
+            {tab === "dashboard" && <Dashboard onOpenEvent={openEvent} onGoTab={goTab} />}
+            {tab === "events" && (eventId ? <EventDetail id={eventId} onBack={() => setEventId(null)} /> : <EventsScreen onOpen={setEventId} />)}
+            {tab === "tasks" && <TasksScreen onOpenEvent={openEvent} />}
+            {tab === "recipes" && <RecipesScreen />}
+            {tab === "products" && <ProductsScreen />}
+            {tab === "services" && <ServicesScreen />}
+            {tab === "requisites" && <RequisitesScreen />}
+          </Suspense>
         </div>
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-gradient-to-t from-pine-950/98 to-pine-900/95 backdrop-blur-xl md:hidden">
-        <div className="grid grid-cols-7 px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5">{NAV.map((n) => { const active = tab === n.id; return (<button key={n.id} onClick={() => goTab(n.id)} className="tap relative flex flex-col items-center gap-1 py-1.5"><span className={`absolute -top-1.5 h-1 w-7 rounded-full bg-saffron transition-all ${active ? "opacity-100 shadow-lg shadow-saffron/50" : "opacity-0"}`} /><n.Icon size={18} className={`transition-all ${active ? "text-saffron scale-110" : "text-sage"}`} /><span className={`text-[8.5px] font-bold tracking-wide transition-all ${active ? "text-saffron" : "text-sage"}`}>{n.short}</span></button>); })}</div>
+        <div className="grid grid-cols-7 px-0.5 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 sm:px-1">{NAV.map((n) => { const active = tab === n.id; return (<button key={n.id} onClick={() => goTab(n.id)} className="tap relative flex min-w-0 flex-col items-center gap-1 py-1.5"><span className={`absolute -top-1.5 h-1 w-7 rounded-full bg-saffron transition-all ${active ? "opacity-100 shadow-lg shadow-saffron/50" : "opacity-0"}`} /><n.Icon size={18} className={`transition-all ${active ? "text-saffron scale-110" : "text-sage"}`} /><span className={`max-w-full truncate text-[8px] font-bold tracking-tight transition-all sm:text-[8.5px] ${active ? "text-saffron" : "text-sage"}`}>{n.short}</span></button>); })}</div>
       </nav>
     </div>
   );
 }
 
 export default function App() {
-  return (<StoreProvider><ToastProvider><AppInner /></ToastProvider></StoreProvider>);
+  return (<StoreProvider><ToastProvider><ErrorBoundary><AppInner /></ErrorBoundary></ToastProvider></StoreProvider>);
 }

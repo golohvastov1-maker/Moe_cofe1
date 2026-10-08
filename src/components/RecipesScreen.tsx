@@ -64,7 +64,7 @@ export function RecipesScreen() {
                     const inEvents = usageInEvents(r.id);
                     const costPer = recipePerPortion(r, state.products);
                     return (
-                      <div key={r.id} role="button" tabIndex={0} onClick={() => { setEditing(r); setOpen(true); }} className={`reveal group flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-pine-800/70 ${i > 0 ? "border-t border-line/70" : ""}`}>
+                      <div key={r.id} role="button" tabIndex={0} onClick={() => { setEditing(r); setOpen(true); }} className={`reveal group flex flex-wrap cursor-pointer items-center gap-2 px-3 py-3 hover:bg-pine-800/70 sm:flex-nowrap sm:gap-3 sm:px-4 ${i > 0 ? "border-t border-line/70" : ""}`}>
                         <div className="min-w-0 grow">
                           <div className="flex items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{r.name}</p><ServingBadge serving={r.serving} />{r.hideFromPriceList && <span className="shrink-0 rounded-full border border-coral/30 bg-coral/10 px-2 py-0.5 text-[9px] font-bold uppercase text-coral">скрыто из прайса</span>}</div>
                           <p className="mt-0.5 truncate text-[11.5px] text-sage">выход {r.servingWeight} г · общий вес {fmtNum(recipeTotalWeight(r, state.products))} г · {r.portions} чел-к · {r.ingredients.length} ингр.{inEvents > 0 && ` · в ${inEvents} событ.`}</p>
@@ -74,11 +74,11 @@ export function RecipesScreen() {
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-sage">цена с чел-ка</p>
                           <p className="text-[9.5px] text-sage">себест. {fmtMoney(costPer)} · {r.markupMode === "fixed" ? "фикс." : `+${r.markupValue}%`}</p>
                         </div>
-                        <div className="w-[92px] shrink-0 text-right">
+                        <div className="w-[76px] shrink-0 text-right sm:w-[92px]">
                           <p className="font-display text-[13px] leading-tight text-mint">{fmtMoney(recipeFinalTotal(r, state.products))}</p>
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-sage">блюдо</p>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1 opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                        <div className="ml-auto flex shrink-0 items-center gap-1 opacity-60 group-hover:opacity-100 sm:ml-0" onClick={(e) => e.stopPropagation()}>
                           <button onClick={() => setTechCardPreview(r)} aria-label="Печать тех.карты" className="tap grid h-8 w-8 place-items-center rounded-[10px] border border-line text-sage hover:border-mint/50 hover:text-mint" title="Печать тех.карты"><IcPrinter size={14} /></button>
                           <DangerConfirm onConfirm={() => { deleteRecipe(r.id); toast("Рецепт удалён", "del"); }} />
                         </div>
@@ -214,18 +214,52 @@ function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: bool
 
 function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
   const { state } = useStore();
+  const toast = useToast();
   const totalWeight = recipeTotalWeight(recipe, state.products);
-  const costPer = recipePerPortion(recipe, state.products);
-  const pricePer = recipeFinalPerPortion(recipe, state.products);
+  const exportToExcel = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        [`Технологическая карта: ${recipe.name}`],
+        ["Категория", recipe.category],
+        ["Выход порции", `${recipe.servingWeight} г`],
+        ["Рассчитано на", `${recipe.portions} порций`],
+        ["Способ подачи", SERVING_LABEL[recipe.serving]],
+        ...(recipe.description ? [["Описание", recipe.description]] : []),
+        ...(recipe.techNote ? [["Технология приготовления", recipe.techNote]] : []),
+        [],
+        ["Ингредиент", "На 1 порцию", "Всего"],
+        ...recipe.ingredients.flatMap((row) => {
+          const product = state.products.find((item) => item.id === row.productId);
+          if (!product) return [];
+          const perPortion = row.amount / recipe.portions;
+          return [[
+            product.name,
+            isWeighed(product.unit) ? amountLabel(perPortion, product.unit) : `${fmtNum(perPortion)} ${product.unit}`,
+            isWeighed(product.unit) ? amountLabel(row.amount, product.unit) : pieceAmountLabel(product, row.amount),
+          ]];
+        }),
+        [],
+        ["Общий вес", `${fmtNum(totalWeight)} г`],
+      ]);
+      worksheet["!cols"] = [{ wch: 36 }, { wch: 22 }, { wch: 22 }];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Техкарта");
+      XLSX.writeFile(workbook, `Техкарта - ${recipe.name.replace(/[\\/:*?"<>|]/g, "-")}.xlsx`);
+    } catch (error) {
+      console.error("Не удалось экспортировать технологическую карту в Excel.", error);
+      toast("Не удалось сохранить файл Excel", "del");
+    }
+  };
   
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#04100c]/97 backdrop-blur-md">
-      <div className="w-full max-w-[800px] max-h-[90vh] overflow-y-auto rounded-[16px] border border-line bg-pine-900 shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-pine-900 px-6 py-4">
+    <div className="print-host print-tech-card-host fixed inset-0 z-[80] flex items-center justify-center bg-[#04100c]/97 backdrop-blur-md">
+      <div className="print-tech-card-modal w-full max-w-[800px] max-h-[90vh] overflow-y-auto rounded-[16px] border border-line bg-pine-900 shadow-2xl">
+        <div className="no-print sticky top-0 z-10 flex items-center justify-between border-b border-line bg-pine-900 px-6 py-4">
           <h2 className="font-display text-[18px] text-cream">Тех. карта: {recipe.name}</h2>
           <button onClick={onClose} className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream"><IcX size={16} /></button>
         </div>
-        <div className="p-6" style={{ background: "#fefdfb", color: "#2d2420" }}>
+        <div id="print-root" className="print-tech-card-content print-sheet p-6" style={{ background: "#fefdfb", color: "#2d2420" }}>
           <div className="mb-6 border-b-2 pb-4" style={{ borderColor: "#3d3530" }}>
             <h1 className="font-display text-[24px] leading-tight">{recipe.name}</h1>
             <p className="mt-2 text-[12px]" style={{ color: "#8a7f75" }}>
@@ -275,24 +309,17 @@ function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => v
             </table>
           </div>
           
-          <div className="grid grid-cols-3 gap-4 border-t-2 pt-4" style={{ borderColor: "#3d3530" }}>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Общий вес</p>
-              <p className="mt-1 font-display text-[18px]">{fmtNum(totalWeight)} г</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Себестоимость порции</p>
-              <p className="mt-1 font-display text-[18px]">{fmtMoney(costPer)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Цена с чел-ка</p>
-              <p className="mt-1 font-display text-[18px]">{fmtMoney(pricePer)}</p>
-            </div>
+          <div className="border-t-2 pt-4" style={{ borderColor: "#3d3530" }}>
+            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "#8a7f75" }}>Общий вес</p>
+            <p className="mt-1 font-display text-[18px]">{fmtNum(totalWeight)} г</p>
           </div>
         </div>
-        <div className="sticky bottom-0 border-t border-line bg-pine-900 px-6 py-4">
+        <div className="no-print sticky bottom-0 flex flex-wrap gap-2 border-t border-line bg-pine-900 px-6 py-4">
+          <button onClick={() => void exportToExcel()} className="tap flex items-center gap-2 rounded-[11px] border border-line px-4 py-2 font-display text-[12px] font-bold text-sage hover:text-mint">
+            <IcDownload size={15} /> Сохранить в Excel
+          </button>
           <button onClick={() => window.print()} className="tap flex items-center gap-2 rounded-[11px] bg-saffron px-4 py-2 font-display text-[12px] font-bold text-pine-950 hover:brightness-110">
-            <IcPrinter size={15} /> Печать / PDF
+            <IcPrinter size={15} /> Сохранить в PDF
           </button>
         </div>
       </div>
