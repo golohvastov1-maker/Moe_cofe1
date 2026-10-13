@@ -404,7 +404,7 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
   const DOCS: { kind: DocKind; title: string; desc: string; Icon: typeof IcDoc }[] = [
     { kind: "chef", title: "Задание для поваров", desc: "Техкарты по зонам кухни с весами на число порций", Icon: IcBook },
     { kind: "shopping", title: "Сводный список закупок", desc: "Агрегация ингредиентов всего меню", Icon: IcCart },
-    { kind: "invoice", title: "Счёт для клиента", desc: ev.type === "Поминки" ? "Для поминок — только услуги, без перечня блюд" : "Блюда по категориям с наценкой + услуги и скидки", Icon: IcRuble },
+    { kind: "invoice", title: "Счёт для клиента", desc: ev.type === "Поминки" ? "Для поминок — услуги и дополнительные блюда; блюда категории «Поминки» скрыты" : "Блюда по категориям с наценкой + услуги и скидки", Icon: IcRuble },
   ];
   return (
     <div className="space-y-6">

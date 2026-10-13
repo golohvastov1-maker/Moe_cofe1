@@ -114,7 +114,7 @@ export function StepperInput({ value, onChange, min = 1, small = false, placehol
       <button onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} aria-label="Уменьшить" className={`tap grid ${small ? "h-6 w-6" : "h-8 w-8"} place-items-center rounded-[9px] bg-pine-700 text-sage transition-colors hover:text-cream disabled:opacity-30`}>
         <IcMinus size={small ? 12 : 14} />
       </button>
-      <input type="text" value={inputValue} onChange={handleInputChange} onBlur={handleBlur} placeholder={placeholder} className={`${small ? "w-12 text-[13px]" : "w-14 text-[15px]"} text-center font-display font-bold bg-transparent outline-none`} />
+      <input type="text" inputMode="numeric" value={inputValue} onChange={handleInputChange} onBlur={handleBlur} placeholder={placeholder} className={`${small ? "w-12 text-[13px]" : "w-14 text-[15px]"} text-center font-display font-bold bg-transparent outline-none`} />
       <button onClick={() => onChange(value + 1)} aria-label="Увеличить" className={`tap grid ${small ? "h-6 w-6" : "h-8 w-8"} place-items-center rounded-[9px] bg-pine-700 text-sage transition-colors hover:text-cream`}>
         <IcPlus size={small ? 12 : 14} />
       </button>

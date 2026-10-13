@@ -235,6 +235,31 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
   const sum = eventSummary(ev, state.recipes, state.products);
   const st = EVENT_TYPE_STYLE[ev.type];
   const isFuneral = ev.type === "Поминки";
+  const servicesTable = ev.services.length > 0 && (
+    <div className={isFuneral ? "mt-2" : "mt-6"}>
+      {!isFuneral && <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Услуги</p>}
+      <table className={`${isFuneral ? "" : "mt-2 "}w-full border-collapse text-[11.5px]`}>
+        <thead>
+          <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
+            <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Наименование</th>
+            <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Кол-во</th>
+            <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Цена</th>
+            <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Сумма</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ev.services.map((s, idx) => (
+            <tr key={s.id} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+              <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{s.name}</td>
+              <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtNum(s.quantity)} {s.unit}</td>
+              <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(s.price)}</td>
+              <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(s.price * s.quantity)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
   return (
     <div className="px-10 py-12" style={{ background: "#fefdfb" }}>
       <DocHeader note="финансовый документ" />
@@ -245,6 +270,8 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
         </div>
         <span className="shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: st.fg === "#aebfd2" ? "#5c6b80" : GOLD, background: "rgba(0,0,0,0.04)", border: `1px solid ${RULE}` }}>{ev.type}</span>
       </div>
+      {isFuneral && <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Организация поминального стола</p>}
+      {isFuneral && servicesTable}
       {!isFuneral ? (
         <div className="mt-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Блюда по меню</p>
@@ -292,31 +319,11 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
           </div>
         </div>
       ) : (
-        <div className="mt-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Организация поминального стола</p>
+        <div className={ev.services.length > 0 ? "mt-5" : "mt-6"}>
           {(() => {
-            const memorialDishes = sum.dishes.filter((dish) => dish.recipe.category === "Поминки");
             const additionalDishes = sum.dishes.filter((dish) => dish.recipe.category !== "Поминки");
             return (
               <>
-                {memorialDishes.length > 0 && (
-                  <table className="mt-2 w-full border-collapse text-[11.5px]">
-                    <thead>
-                      <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
-                        <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Блюдо</th>
-                        <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Порций</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {memorialDishes.map((dish, index) => (
-                        <tr key={dish.recipe.id} style={{ background: index % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
-                          <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{dish.recipe.name}</td>
-                          <td className="border-b py-1.5 text-right tabular-nums" style={{ borderColor: RULE }}>{dish.dish.portions}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
                 {additionalDishes.length > 0 && (
                   <div className="mt-5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: SOFT }}>Дополнительные блюда</p>
@@ -350,31 +357,7 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
           })()}
         </div>
       )}
-      {ev.services.length > 0 && (
-        <div className="mt-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Услуги</p>
-          <table className="mt-2 w-full border-collapse text-[11.5px]">
-            <thead>
-              <tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
-                <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Наименование</th>
-                <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Кол-во</th>
-                <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Цена</th>
-                <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Сумма</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ev.services.map((s, idx) => (
-                <tr key={s.id} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
-                  <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{s.name}</td>
-                  <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtNum(s.quantity)} {s.unit}</td>
-                  <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(s.price)}</td>
-                  <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(s.price * s.quantity)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {!isFuneral && servicesTable}
       {(ev.clientItems?.length ?? 0) > 0 && (
         <div className="mt-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Привозит/готовит клиент</p>
@@ -526,17 +509,16 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
         
         wsData.push(["", "", "Итого блюда:", fmtMoney(sum.foodAfterDiscount)]);
       } else {
-        const memorialDishes = sum.dishes.filter((dish) => dish.recipe.category === "Поминки");
         const additionalDishes = sum.dishes.filter((dish) => dish.recipe.category !== "Поминки");
         wsData.push(["Организация поминального стола"]);
-        if (memorialDishes.length > 0) {
-          wsData.push(["Блюдо", "Порций"]);
-          memorialDishes.forEach((dish) => {
-            wsData.push([dish.recipe.name, dish.dish.portions]);
+        if (event.services.length > 0) {
+          wsData.push(["Наименование", "Кол-во", "Цена", "Сумма"]);
+          event.services.forEach((s) => {
+            wsData.push([s.name, `${fmtNum(s.quantity)} ${s.unit}`, fmtMoney(s.price), fmtMoney(s.price * s.quantity)]);
           });
         }
         if (additionalDishes.length > 0) {
-          wsData.push([]);
+          if (event.services.length > 0) wsData.push([]);
           wsData.push(["Дополнительные блюда"]);
           wsData.push(["Блюдо", "Порций", "Цена за порцию", "Стоимость"]);
           additionalDishes.forEach((dish) => {
@@ -550,7 +532,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
         }
       }
       
-      if (event.services.length > 0) {
+      if (event.type !== "Поминки" && event.services.length > 0) {
         wsData.push([]);
         wsData.push(["Услуги"]);
         wsData.push(["Наименование", "Кол-во", "Цена", "Сумма"]);

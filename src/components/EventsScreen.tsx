@@ -3,7 +3,7 @@ import type { EventPlan, EventType } from "../types";
 import { EVENT_TYPE_STYLE, EVENT_TYPES, PRODUCT_CATEGORIES, isWeighed } from "../types";
 import { useStore } from "../store";
 import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, todayISO, uid } from "../utils";
-import { DangerConfirm, EmptyState, Field, Modal, Segmented, Stepper, inputCls, useToast } from "./UI";
+import { DangerConfirm, EmptyState, Field, Modal, Segmented, Stepper, StepperInput, inputCls, useToast } from "./UI";
 import { IcCalendar, IcPlus, IcSearch, IcX, IcDoc, IcDownload, IcPrinter } from "./Icons";
 import { MultiShoppingPreview } from "./PrintDocs";
 import type { CombinedShoppingList } from "../types";
@@ -400,7 +400,7 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
       <div className="space-y-5">
         <Field label="Название"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Свадьба Михаила и Елены" className={inputCls} autoFocus={!editing} /></Field>
         <Field label="Тип мероприятия"><div className="grid grid-cols-2 gap-2">{EVENT_TYPES.map((t) => { const st = EVENT_TYPE_STYLE[t]; const active = t === type; return (<button key={t} onClick={() => { setType(t); const gpt = t === "Торжество" ? 6 : 8; setGuestsPerTable(gpt); setTablesCount(Math.ceil(guests / gpt)); }} className="tap rounded-[12px] border py-3 text-[13px] font-semibold transition-colors" style={active ? { borderColor: st.fg, background: st.bg, color: st.fg } : { borderColor: "var(--color-line)", color: "var(--color-sage)" }}>{t}</button>); })}</div></Field>
-        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Дата"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls + " font-display text-[13px]"} /></Field><Field label="Гостей"><Stepper value={guests} onChange={(v) => { setGuests(v); setTablesCount(Math.ceil(v / guestsPerTable)); }} min={1} /></Field></div>
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Дата"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls + " font-display text-[13px]"} /></Field><Field label="Гостей"><StepperInput value={guests} onChange={(v) => { setGuests(v); setTablesCount(Math.ceil(v / guestsPerTable)); }} min={1} placeholder="Кол-во" /></Field></div>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Гостей за столом"><Stepper value={guestsPerTable} onChange={(v) => { setGuestsPerTable(v); setTablesCount(Math.ceil(guests / v)); }} min={1} /></Field><Field label="Столов"><Stepper value={tablesCount} onChange={setTablesCount} min={1} /></Field></div>
       </div>
     </Modal>
