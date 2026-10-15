@@ -12,11 +12,28 @@ import type {
   Task,
 } from "./types";
 import { seedState } from "./data";
+import { getRemoteSyncEnabled, loadRemoteSnapshot, saveRemoteSnapshot } from "./sync";
 import type { PriceRowInput } from "./utils";
 import { round2, todayISO, uid } from "./utils";
 
 const KEY = "moe-cafe-v8";
 const LEGACY_KEY = "moe-cafe-v7";
+const META_KEY = "moe-cafe-sync-meta";
+
+function readLocal(): AppState {
+  for (const key of [KEY, LEGACY_KEY]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<AppState>;
+        return normalize(parsed);
+      }
+    } catch (error) {
+      console.error(`Не удалось загрузить данные из ${key}.`, error);
+    }
+  }
+  return seedState;
+}
 
 function normalize(raw: Partial<AppState>): AppState {
   const base = seedState;
@@ -64,19 +81,15 @@ function normalize(raw: Partial<AppState>): AppState {
   };
 }
 
-function load(): AppState {
-  for (const key of [KEY, LEGACY_KEY]) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<AppState>;
-        return normalize(parsed);
-      }
-    } catch (error) {
-      console.error(`Не удалось загрузить данные из ${key}.`, error);
-    }
-  }
-  return seedState;
+function readLocalMeta(): number {
+  const value = localStorage.getItem(META_KEY);
+  if (!value) return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function writeLocalMeta(value: number) {
+  localStorage.setItem(META_KEY, String(value));
 }
 
 import type { CombinedShoppingList } from "./types";
@@ -109,14 +122,44 @@ interface StoreApi {
 const Ctx = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AppState>(load);
+  const [state, setState] = useState<AppState>(() => readLocal());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateRemote = async () => {
+      if (!getRemoteSyncEnabled()) return;
+
+      const remote = await loadRemoteSnapshot();
+      if (cancelled || !remote) return;
+
+      const localUpdatedAt = readLocalMeta();
+      const remoteUpdatedAt = Date.parse(remote.updatedAt);
+      if (!Number.isNaN(remoteUpdatedAt) && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) {
+        setState((current) => {
+          const next = normalize(remote.state);
+          return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+        });
+      }
+    };
+
+    void hydrateRemote();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
+      writeLocalMeta(Date.now());
     } catch (error) {
       console.error("Не удалось сохранить данные приложения.", error);
       window.dispatchEvent(new CustomEvent("moe-cafe-storage-error"));
+    }
+
+    if (getRemoteSyncEnabled()) {
+      void saveRemoteSnapshot(state);
     }
   }, [state]);
 
