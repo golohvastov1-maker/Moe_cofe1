@@ -1,18 +1,15 @@
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import type { Tab } from "./types";
 import { StoreProvider, useStore } from "./store";
 import { ToastProvider } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BrandMark, IcBasket, IcBriefcase, IcCalendar, IcDash, IcDoc, IcHat, IcTask } from "./components/Icons";
-
-const Dashboard = lazy(() => import("./components/Dashboard").then((module) => ({ default: module.Dashboard })));
-const ProductsScreen = lazy(() => import("./components/Screens").then((module) => ({ default: module.ProductsScreen })));
-const ServicesScreen = lazy(() => import("./components/Screens").then((module) => ({ default: module.ServicesScreen })));
-const RequisitesScreen = lazy(() => import("./components/Screens").then((module) => ({ default: module.RequisitesScreen })));
-const RecipesScreen = lazy(() => import("./components/RecipesScreen").then((module) => ({ default: module.RecipesScreen })));
-const EventsScreen = lazy(() => import("./components/EventsScreen").then((module) => ({ default: module.EventsScreen })));
-const EventDetail = lazy(() => import("./components/EventDetail").then((module) => ({ default: module.EventDetail })));
-const TasksScreen = lazy(() => import("./components/TasksScreen").then((module) => ({ default: module.TasksScreen })));
+import { Dashboard } from "./components/Dashboard";
+import { ProductsScreen, RequisitesScreen, ServicesScreen } from "./components/Screens";
+import { RecipesScreen } from "./components/RecipesScreen";
+import { EventsScreen } from "./components/EventsScreen";
+import { EventDetail } from "./components/EventDetail";
+import { TasksScreen } from "./components/TasksScreen";
 
 const NAV: { id: Tab; label: string; short: string; Icon: typeof IcDash }[] = [
   { id: "dashboard", label: "Дашборд", short: "Главная", Icon: IcDash },
@@ -109,15 +106,13 @@ function AppInner() {
       </div>
       <main className="relative bg-pine-950 md:pl-[224px]">
         <div className="mx-auto min-h-dvh max-w-[1180px] pb-24 md:pb-10">
-          <Suspense fallback={<div role="status" className="px-5 py-10 text-center text-[13px] text-sage md:px-8">Загрузка раздела…</div>}>
-            {tab === "dashboard" && <Dashboard onOpenEvent={openEvent} onGoTab={goTab} />}
-            {tab === "events" && (eventId ? <EventDetail id={eventId} onBack={() => setEventId(null)} /> : <EventsScreen onOpen={setEventId} />)}
-            {tab === "tasks" && <TasksScreen onOpenEvent={openEvent} />}
-            {tab === "recipes" && <RecipesScreen />}
-            {tab === "products" && <ProductsScreen />}
-            {tab === "services" && <ServicesScreen />}
-            {tab === "requisites" && <RequisitesScreen />}
-          </Suspense>
+          {tab === "dashboard" && <Dashboard onOpenEvent={openEvent} onGoTab={goTab} />}
+          {tab === "events" && (eventId ? <EventDetail id={eventId} onBack={() => setEventId(null)} /> : <EventsScreen onOpen={setEventId} />)}
+          {tab === "tasks" && <TasksScreen onOpenEvent={openEvent} />}
+          {tab === "recipes" && <RecipesScreen />}
+          {tab === "products" && <ProductsScreen />}
+          {tab === "services" && <ServicesScreen />}
+          {tab === "requisites" && <RequisitesScreen />}
         </div>
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-gradient-to-t from-pine-950/98 to-pine-900/95 backdrop-blur-xl md:hidden">
