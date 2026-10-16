@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import type { Category, CategoryInfo, MarkupMode, Product, Recipe, ServingStyle } from "../types";
 import { SERVING_LABEL, amountUnitLabel, catStyle, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, recipeCost, recipeFinalPerPortion, recipeFinalTotal, recipePerPortion, recipeTotalWeight, round2, uid } from "../utils";
+import { amountLabel, downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, recipeCost, recipeFinalPerPortion, recipePerPortion, recipeTotalWeight, round2, uid } from "../utils";
 import { AmountEditor, DangerConfirm, EmptyState, Field, Modal, Segmented, ServingBadge, Stepper, inputCls, selectCls, textareaCls, useToast } from "./UI";
 import { IcDownload, IcHat, IcPlate, IcPlus, IcPrinter, IcSearch, IcTable, IcX } from "./Icons";
 import { CategoriesManager } from "./Screens";
@@ -14,7 +14,7 @@ function compositionStr(r: Recipe, products: Product[]): string {
 }
 
 export function RecipesScreen() {
-  const { state, deleteRecipe, usageInEvents } = useStore();
+  const { state, deleteRecipe } = useStore();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Recipe | null>(null);
@@ -55,28 +55,23 @@ export function RecipesScreen() {
             const group = filtered.filter((r) => r.category === c.name).sort((a, b) => a.name.localeCompare(b.name, "ru"));
             if (group.length === 0) return null;
             const st = catStyle(c.name);
-            const groupTotal = group.reduce((s, r) => s + recipeFinalTotal(r, state.products), 0);
             return (
               <div key={c.id} className="reveal">
-                <div className="mb-2.5 flex items-center gap-2.5"><span className="h-2 w-2 rounded-full" style={{ background: st.fg }} /><h2 className="font-display text-[14px] font-bold" style={{ color: st.fg }}>{c.name}</h2><span className="text-[11px] font-semibold text-sage">{group.length} {group.length === 1 ? "блюдо" : group.length < 5 ? "блюда" : "блюд"}</span><span className="h-px grow bg-line" /><span className="hidden text-[11px] text-sage sm:inline">{fmtMoney(groupTotal)}</span></div>
+                <div className="mb-2.5 flex items-center gap-2.5"><span className="h-2 w-2 rounded-full" style={{ background: st.fg }} /><h2 className="font-display text-[14px] font-bold" style={{ color: st.fg }}>{c.name}</h2><span className="text-[11px] font-semibold text-sage">{group.length} {group.length === 1 ? "блюдо" : group.length < 5 ? "блюда" : "блюд"}</span><span className="h-px grow bg-line" /></div>
                 <div className="overflow-hidden rounded-[16px] border border-line bg-pine-850">
                   {group.map((r, i) => {
-                    const inEvents = usageInEvents(r.id);
-                    const costPer = recipePerPortion(r, state.products);
                     return (
                       <div key={r.id} role="button" tabIndex={0} onClick={() => { setEditing(r); setOpen(true); }} className={`reveal group flex flex-wrap cursor-pointer items-center gap-2 px-3 py-3 hover:bg-pine-800/70 sm:flex-nowrap sm:gap-3 sm:px-4 ${i > 0 ? "border-t border-line/70" : ""}`}>
-                        <div className="min-w-0 grow">
-                          <div className="flex items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{r.name}</p><ServingBadge serving={r.serving} />{r.hideFromPriceList && <span className="shrink-0 rounded-full border border-coral/30 bg-coral/10 px-2 py-0.5 text-[9px] font-bold uppercase text-coral">скрыто из прайса</span>}</div>
-                          <p className="mt-0.5 truncate text-[11.5px] text-sage">выход {r.servingWeight} г · общий вес {fmtNum(recipeTotalWeight(r, state.products))} г · {r.portions} чел-к · {r.ingredients.length} ингр.{inEvents > 0 && ` · в ${inEvents} событ.`}</p>
+                        <div className="min-w-0 grow basis-[65%]">
+                          <p className="truncate text-[13.5px] font-semibold text-cream">{r.name}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <ServingBadge serving={r.serving} />
+                            {r.hideFromPriceList && <span className="shrink-0 rounded-full border border-coral/30 bg-coral/10 px-2 py-0.5 text-[9px] font-bold uppercase text-coral">скрыто из прайса</span>}
+                          </div>
                         </div>
-                        <div className="hidden shrink-0 text-right sm:block">
+                        <div className="shrink-0 text-right">
                           <p className="font-display text-[15px] font-bold leading-tight text-saffron">{fmtMoney(recipeFinalPerPortion(r, state.products))}</p>
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-sage">цена с чел-ка</p>
-                          <p className="text-[9.5px] text-sage">себест. {fmtMoney(costPer)} · {r.markupMode === "fixed" ? "фикс." : `+${r.markupValue}%`}</p>
-                        </div>
-                        <div className="w-[76px] shrink-0 text-right sm:w-[92px]">
-                          <p className="font-display text-[13px] leading-tight text-mint">{fmtMoney(recipeFinalTotal(r, state.products))}</p>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-sage">блюдо</p>
                         </div>
                         <div className="ml-auto flex shrink-0 items-center gap-1 opacity-60 group-hover:opacity-100 sm:ml-0" onClick={(e) => e.stopPropagation()}>
                           <button onClick={() => setTechCardPreview(r)} aria-label="Печать тех.карты" className="tap grid h-8 w-8 place-items-center rounded-[10px] border border-line text-sage hover:border-mint/50 hover:text-mint" title="Печать тех.карты"><IcPrinter size={14} /></button>

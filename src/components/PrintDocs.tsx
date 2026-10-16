@@ -893,22 +893,13 @@ function RecipesPriceDoc({ selectedCategories }: { selectedCategories: string[] 
                 {group.map((r, idx) => (
                   <tr key={r.id} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
                     <td className="border-b py-2.5 pr-4 align-top" style={{ borderColor: RULE }}>
-                      <p className="flex flex-wrap items-center gap-2 font-display text-[13.5px]">
-                        {r.name}
-                        <ServingBadge serving={r.serving} light />
-                      </p>
-                      <p className="mt-0.5 text-[10px]" style={{ color: SOFT }}>
-                        выход {r.servingWeight} г · общий вес {fmtNum(recipeTotalWeight(r, state.products))} г · рассчитано на {r.portions} чел.
-                      </p>
+                      <p className="font-display text-[13.5px]">{r.name}</p>
+                      <div className="mt-1"><ServingBadge serving={r.serving} light /></div>
                       {r.description && <p className="mt-1 text-[10.5px] italic leading-relaxed" style={{ color: SOFT }}>{r.description}</p>}
                     </td>
                     <td className="w-[120px] border-b py-2.5 pr-3 text-right align-top tabular-nums" style={{ borderColor: RULE }}>
                       <p className="font-display text-[14px] font-semibold">{fmtMoney(recipeFinalPerPortion(r, state.products))}</p>
                       <p className="text-[9.5px]" style={{ color: SOFT }}>цена с чел-ка</p>
-                    </td>
-                    <td className="w-[110px] border-b py-2.5 text-right align-top tabular-nums" style={{ borderColor: RULE }}>
-                      <p className="font-semibold">{fmtMoney(recipeFinalPerPortion(r, state.products) * r.portions)}</p>
-                      <p className="text-[9.5px] font-normal" style={{ color: SOFT }}>блюдо целиком</p>
                     </td>
                   </tr>
                 ))}

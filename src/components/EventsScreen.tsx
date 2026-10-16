@@ -17,18 +17,29 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
   const [typeFilter, setTypeFilter] = useState<EventType | "все">("все");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [showPast, setShowPast] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [multiOpen, setMultiOpen] = useState(false);
   const [viewingList, setViewingList] = useState<CombinedShoppingList | null>(null);
+  const [today, setToday] = useState(todayISO);
+  useEffect(() => {
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const timer = window.setTimeout(() => setToday(todayISO()), nextMidnight.getTime() - now.getTime());
+    return () => window.clearTimeout(timer);
+  }, [today]);
   const toggleSelect = (id: string) => setSelected((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
-  const selectedEvents = selected.map((id) => state.events.find((e) => e.id === id)).filter((e): e is EventPlan => !!e);
+  const selectedEvents = selected.map((id) => state.events.find((e) => e.id === id)).filter((e): e is EventPlan => !!e && e.date >= today);
   const hasFilters = q !== "" || typeFilter !== "все" || from !== "" || to !== "";
   const filtered = useMemo(() => state.events.filter((e) => { const okQ = !q || e.name.toLowerCase().includes(q.trim().toLowerCase()); const okT = typeFilter === "все" || e.type === typeFilter; const okFrom = !from || e.date >= from; const okTo = !to || e.date <= to; return okQ && okT && okFrom && okTo; }).sort((a, b) => a.date.localeCompare(b.date)), [state.events, q, typeFilter, from, to]);
-  const upcomingCount = state.events.filter((e) => e.date >= todayISO()).length;
+  const visibleEvents = filtered.filter((event) => showPast ? event.date < today : event.date >= today);
+  const upcomingCount = state.events.filter((e) => e.date >= today).length;
+  const pastCount = state.events.length - upcomingCount;
   return (
     <section className="px-5 pb-8 pt-6 md:px-8">
       <header className="reveal flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="font-display text-[26px] leading-none text-cream">Мероприятия</h1><p className="mt-2 text-[13px] text-sage">{upcomingCount} предстоящих · меню, услуги, скидки и пакет документов</p></div>
+        <div><h1 className="font-display text-[26px] leading-none text-cream">Мероприятия</h1><p className="mt-2 text-[13px] text-sage">{upcomingCount} предстоящих · {pastCount} прошедших · меню, услуги, скидки и документы</p></div>
         <button onClick={() => { setEditing(null); setOpen(true); }} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Мероприятие</button>
       </header>
       <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -40,19 +51,31 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
         </div>
         {hasFilters && <button onClick={() => { setQ(""); setTypeFilter("все"); setFrom(""); setTo(""); }} className="tap rounded-full border border-line px-3 py-1.5 text-[11.5px] font-semibold text-sage hover:text-coral">Сбросить</button>}
       </div>
-      {state.events.length === 0 ? (<EmptyState icon={<IcCalendar size={24} />} title="Мероприятий пока нет" text="Создайте событие." action={<button onClick={() => { setEditing(null); setOpen(true); }} className="tap rounded-full bg-saffron px-5 py-2.5 font-display text-[12px] font-bold text-pine-950">Новое мероприятие</button>} />) : filtered.length === 0 ? (<p className="reveal mt-10 text-center text-[13px] text-sage">В выбранном периоде событий нет</p>) : (
-        <div className="reveal mt-5 overflow-hidden rounded-[16px] border border-line bg-pine-850">
-          {filtered.map((e, i) => {
+      {state.events.length === 0 ? (<EmptyState icon={<IcCalendar size={24} />} title="Мероприятий пока нет" text="Создайте событие." action={<button onClick={() => { setEditing(null); setOpen(true); }} className="tap rounded-full bg-saffron px-5 py-2.5 font-display text-[12px] font-bold text-pine-950">Новое мероприятие</button>} />) : (
+        <>
+          <div className="mt-5 grid grid-cols-2 gap-2 rounded-[13px] border border-line bg-pine-850 p-1">
+            <button onClick={() => setShowPast(false)} aria-pressed={!showPast} className={`tap rounded-[10px] px-3 py-2.5 text-[12px] font-semibold transition-colors ${!showPast ? "bg-saffron text-pine-950" : "text-sage hover:text-cream"}`}>Предстоящие · {upcomingCount}</button>
+            <button onClick={() => { setShowPast(true); setSelected([]); }} aria-pressed={showPast} className={`tap rounded-[10px] px-3 py-2.5 text-[12px] font-semibold transition-colors ${showPast ? "bg-saffron text-pine-950" : "text-sage hover:text-cream"}`}>Прошедшие · {pastCount}</button>
+          </div>
+          {visibleEvents.length === 0 ? (
+            <p className="reveal mt-8 text-center text-[13px] text-sage">
+              {filtered.length === 0
+                ? "По выбранным фильтрам мероприятий нет"
+                : showPast ? "Прошедших мероприятий пока нет" : "Предстоящих мероприятий нет"}
+            </p>
+          ) : (
+        <div className="reveal mt-4 overflow-hidden rounded-[16px] border border-line bg-pine-850">
+          {visibleEvents.map((e, i) => {
             const sum = eventSummary(e, state.recipes, state.products);
             const st = EVENT_TYPE_STYLE[e.type];
-            const past = e.date < todayISO();
+            const past = e.date < today;
             const isSel = selected.includes(e.id);
             const [day, mon] = fmtDateShort(e.date).split(" ");
             return (
               <div key={e.id} role="button" tabIndex={0} onClick={() => onOpen(e.id)} className={`reveal group grid cursor-pointer grid-cols-[26px_52px_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-pine-800/70 md:grid-cols-[30px_120px_1fr_110px_170px_96px] ${i > 0 ? "border-t border-line/70" : ""} ${past ? "opacity-70" : ""} ${isSel ? "bg-saffron/6" : ""}`} style={{ animationDelay: `${Math.min(i * 45, 400)}ms` }}>
-                <button onClick={(ev) => { ev.stopPropagation(); toggleSelect(e.id); }} aria-label="В общий список закупок" className="tap grid place-items-center">
+                {past ? <span aria-hidden className="grid place-items-center text-[11px] text-sage">✓</span> : <button onClick={(ev) => { ev.stopPropagation(); toggleSelect(e.id); }} aria-label="В общий список закупок" className="tap grid place-items-center">
                   <span className={`grid h-[22px] w-[22px] place-items-center rounded-[7px] border transition-all ${isSel ? "anim-pop border-saffron bg-saffron text-pine-950" : "border-pine-500 text-transparent hover:border-saffron/60"}`}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
-                </button>
+                </button>}
                 <div className="grid h-[46px] w-[52px] place-items-center rounded-[11px] border border-line bg-pine-800 text-center"><div><p className="font-display text-[15px] leading-none text-saffron">{day}</p><p className="mt-0.5 text-[8.5px] font-bold uppercase tracking-wide text-sage">{mon}</p></div></div>
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{e.name}</p><span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.05em]" style={{ color: st.fg, background: st.bg }}>{e.type}</span></div><p className="mt-0.5 text-[11px] text-sage">{fmtDateShort(e.date)} · {daysUntilLabel(e.date)} · {e.dishes.length} {plural(e.dishes.length, ["блюдо", "блюда", "блюд"])}<span className="md:hidden"> · {e.guests} {plural(e.guests, ["гость", "гостя", "гостей"])} · {e.tablesCount} {plural(e.tablesCount, ["стол", "стола", "столов"])}</span></p></div>
                 <div className="hidden text-right md:block"><p className="font-display text-[14px] text-cream">{e.guests}</p></div>
@@ -62,6 +85,8 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
             );
           })}
         </div>
+          )}
+        </>
       )}
       {selectedEvents.length > 0 && (
         <div className="anim-modal fixed inset-x-0 bottom-[76px] z-40 mx-auto flex w-[calc(100%-24px)] max-w-[600px] items-center gap-2.5 rounded-[16px] border border-saffron/30 bg-pine-850/95 px-4 py-3 shadow-[0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-md md:bottom-6">
@@ -284,7 +309,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
                             value={item.purchasePlace ?? ""}
                             onChange={(event) => updatePlace(item.productId, event.target.value)}
                             placeholder="Где купить?"
-                            className={inputCls + " w-full max-w-[180px] py-1.5 text-[12px]"}
+                            className={inputCls + " w-[130px] max-w-[42vw] py-1.5 text-[11px] sm:w-[180px] sm:text-[12px]"}
                           />
                           <button
                             onClick={() => toggle(item.productId, "inStock")}

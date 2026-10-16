@@ -459,7 +459,7 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
                               value={ev.purchasePlaces?.[r.product.id] ?? ""}
                               onChange={(event) => setPurchasePlace([ev.id], r.product.id, event.target.value)}
                               placeholder="Где купить?"
-                              className={inputCls + " w-full max-w-[180px] py-1.5 text-[12px]"}
+                              className={inputCls + " w-[130px] max-w-[42vw] py-1.5 text-[11px] sm:w-[180px] sm:text-[12px]"}
                             />
                             <button onClick={() => toggle("inStock", r.product.id)} className={`tap rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors ${isStock ? "border-glacier/50 bg-glacier/15 text-glacier" : "border-line text-sage hover:text-glacier"}`}>есть на складе</button>
                             <button onClick={() => toggle("bought", r.product.id)} className={`tap rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors ${isBought ? "border-mint/50 bg-mint/15 text-mint" : "border-line text-sage hover:text-mint"}`}>куплено</button>

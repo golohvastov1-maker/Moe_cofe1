@@ -1,0 +1,17 @@
+{
+  "name": "Моё кафе — учёт и калькуляция",
+  "short_name": "Моё кафе",
+  "lang": "ru",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#040d0a",
+  "theme_color": "#040d0a",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
