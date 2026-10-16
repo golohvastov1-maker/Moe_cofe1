@@ -18,11 +18,7 @@ import { round2, todayISO, uid } from "./utils";
 
 const KEY = "moe-cafe-v8";
 const LEGACY_KEY = "moe-cafe-v7";
-<<<<<<< HEAD
-
 export type SyncStatus = "local" | "connecting" | "synced" | "syncing" | "error";
-=======
->>>>>>> c66af0f (Commit)
 
 function readLocal(): AppState {
   for (const key of [KEY, LEGACY_KEY]) {
@@ -120,29 +116,19 @@ const Ctx = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => readLocal());
-<<<<<<< HEAD
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(() =>
     getRemoteSyncEnabled() ? "connecting" : "local",
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-=======
->>>>>>> c66af0f (Commit)
   const latestState = useRef(state);
   const initialState = useRef(state);
   const lastSyncedState = useRef<string | null>(null);
   const lastRemoteUpdatedAt = useRef(0);
-<<<<<<< HEAD
   const syncInitialized = useRef(!getRemoteSyncEnabled());
   const syncInProgress = useRef(false);
   const syncNow = useRef<(() => Promise<void>) | null>(null);
   const saveTimer = useRef<number | null>(null);
-=======
-  const syncReady = useRef(!getRemoteSyncEnabled());
-  const syncInProgress = useRef(false);
-  const syncNow = useRef<(() => Promise<void>) | null>(null);
-  const debounceTimer = useRef<number | null>(null);
->>>>>>> c66af0f (Commit)
   latestState.current = state;
 
   useEffect(() => {
@@ -151,10 +137,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const synchronize = async () => {
       if (cancelled || syncInProgress.current || !getRemoteSyncEnabled()) return;
       syncInProgress.current = true;
-<<<<<<< HEAD
       if (!syncInitialized.current) setSyncStatus("connecting");
-=======
->>>>>>> c66af0f (Commit)
 
       try {
         const remote = await loadRemoteSnapshot();
@@ -163,19 +146,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const current = latestState.current;
         const currentSnapshot = JSON.stringify(current);
 
-<<<<<<< HEAD
         if (!syncInitialized.current) {
           const localChangedWhileLoading = currentSnapshot !== JSON.stringify(initialState.current);
 
-=======
-        if (!syncReady.current) {
->>>>>>> c66af0f (Commit)
           if (remote) {
             const remoteUpdatedAt = Date.parse(remote.updatedAt);
             if (Number.isNaN(remoteUpdatedAt)) {
               throw new Error("Supabase вернул некорректное время обновления.");
             }
-<<<<<<< HEAD
 
             const remoteState = normalize(remote.state);
             const remoteSnapshot = JSON.stringify(remoteState);
@@ -213,45 +191,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           syncInitialized.current = true;
           setSyncError(null);
           setSyncStatus("synced");
-=======
-            lastRemoteUpdatedAt.current = remoteUpdatedAt;
-
-            if (current !== initialState.current) {
-              const savedAt = await saveRemoteSnapshot(current);
-              if (savedAt) {
-                lastRemoteUpdatedAt.current = Date.parse(savedAt);
-                lastSyncedState.current = currentSnapshot;
-                syncReady.current = true;
-              }
-            } else {
-              const next = normalize(remote.state);
-              const snapshot = JSON.stringify(next);
-              lastSyncedState.current = snapshot;
-              syncReady.current = true;
-              setState((value) => {
-                const valueSnapshot = JSON.stringify(value);
-                if (valueSnapshot !== currentSnapshot && valueSnapshot !== snapshot) return value;
-                return valueSnapshot === snapshot ? value : next;
-              });
-            }
-          } else {
-            const savedAt = await saveRemoteSnapshot(current);
-            if (savedAt) {
-              lastRemoteUpdatedAt.current = Date.parse(savedAt);
-              lastSyncedState.current = currentSnapshot;
-              syncReady.current = true;
-            }
-          }
->>>>>>> c66af0f (Commit)
           return;
         }
 
         const isLocallyDirty = currentSnapshot !== lastSyncedState.current;
         const remoteUpdatedAt = remote ? Date.parse(remote.updatedAt) : 0;
-<<<<<<< HEAD
-=======
-
->>>>>>> c66af0f (Commit)
         if (remote && Number.isNaN(remoteUpdatedAt)) {
           throw new Error("Supabase вернул некорректное время обновления.");
         }
@@ -263,7 +207,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (remote && remoteState && remoteSnapshot !== null && (remoteUpdatedAt > lastRemoteUpdatedAt.current || remoteChanged)) {
           lastRemoteUpdatedAt.current = remoteUpdatedAt;
           if (isLocallyDirty) {
-<<<<<<< HEAD
             setSyncStatus("syncing");
             const savedAt = await saveRemoteSnapshot(current);
             lastRemoteUpdatedAt.current = Date.parse(savedAt);
@@ -296,33 +239,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         console.error("Ошибка синхронизации с Supabase.", error);
         setSyncError(error instanceof Error ? error.message : "Не удалось связаться с Supabase.");
         setSyncStatus("error");
-=======
-            const savedAt = await saveRemoteSnapshot(current);
-            if (savedAt) {
-              lastRemoteUpdatedAt.current = Date.parse(savedAt);
-              lastSyncedState.current = currentSnapshot;
-            }
-          } else {
-            const next = remoteState;
-            const snapshot = remoteSnapshot;
-            const baselineSnapshot = lastSyncedState.current;
-            lastSyncedState.current = snapshot;
-            setState((value) => {
-              const valueSnapshot = JSON.stringify(value);
-              if (valueSnapshot !== baselineSnapshot && valueSnapshot !== snapshot) return value;
-              return valueSnapshot === snapshot ? value : next;
-            });
-          }
-        } else if (!remote || isLocallyDirty) {
-          const savedAt = await saveRemoteSnapshot(current);
-          if (savedAt) {
-            lastRemoteUpdatedAt.current = Date.parse(savedAt);
-            lastSyncedState.current = currentSnapshot;
-          }
-        }
-      } catch (error) {
-        console.error("Ошибка синхронизации с Supabase.", error);
->>>>>>> c66af0f (Commit)
       } finally {
         syncInProgress.current = false;
       }
@@ -331,60 +247,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     syncNow.current = synchronize;
     void synchronize();
     const interval = window.setInterval(() => void synchronize(), 3000);
-<<<<<<< HEAD
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void synchronize();
     };
     window.addEventListener("online", synchronize);
     document.addEventListener("visibilitychange", onVisibilityChange);
-=======
-    const synchronizeWhenVisible = () => {
-      if (document.visibilityState === "visible") void synchronize();
-    };
-    window.addEventListener("online", synchronize);
-    document.addEventListener("visibilitychange", synchronizeWhenVisible);
->>>>>>> c66af0f (Commit)
 
     return () => {
       cancelled = true;
       syncNow.current = null;
       window.clearInterval(interval);
       window.removeEventListener("online", synchronize);
-<<<<<<< HEAD
       document.removeEventListener("visibilitychange", onVisibilityChange);
-=======
-      document.removeEventListener("visibilitychange", synchronizeWhenVisible);
->>>>>>> c66af0f (Commit)
     };
   }, []);
 
   useEffect(() => {
     const snapshot = JSON.stringify(state);
     try {
-<<<<<<< HEAD
       localStorage.setItem(KEY, snapshot);
-=======
-      localStorage.setItem(KEY, JSON.stringify(state));
->>>>>>> c66af0f (Commit)
     } catch (error) {
       console.error("Не удалось сохранить данные приложения.", error);
       window.dispatchEvent(new CustomEvent("moe-cafe-storage-error"));
     }
 
-<<<<<<< HEAD
     if (!getRemoteSyncEnabled() || !syncInitialized.current) return;
     if (snapshot === lastSyncedState.current) return;
 
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => void syncNow.current?.(), 500);
-=======
-    if (!getRemoteSyncEnabled() || !syncReady.current || JSON.stringify(state) === lastSyncedState.current) return;
-
-    if (debounceTimer.current !== null) window.clearTimeout(debounceTimer.current);
-    debounceTimer.current = window.setTimeout(() => {
-      void syncNow.current?.();
-    }, 500);
->>>>>>> c66af0f (Commit)
   }, [state]);
 
   const saveProduct = (p: Product) => {

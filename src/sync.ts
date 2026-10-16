@@ -10,14 +10,10 @@ declare global {
 export const SYNC_ID = "shared";
 export const SYNC_TABLE = "app_state";
 
-<<<<<<< HEAD
 export interface RemoteSnapshot {
   state: AppState;
   updatedAt: string;
 }
-=======
-let supabaseClient: SupabaseClient | null = null;
->>>>>>> c66af0f (Commit)
 
 let supabaseClient: SupabaseClient | null = null;
 
@@ -54,10 +50,7 @@ export async function loadRemoteSnapshot(): Promise<RemoteSnapshot | null> {
     .maybeSingle();
 
   if (error) {
-<<<<<<< HEAD
-=======
     window.dispatchEvent(new CustomEvent("moe-cafe-sync-error", { detail: { message: "Не удалось загрузить данные из облака." } }));
->>>>>>> c66af0f (Commit)
     throw error;
   }
 
@@ -70,7 +63,6 @@ export async function loadRemoteSnapshot(): Promise<RemoteSnapshot | null> {
   };
 }
 
-<<<<<<< HEAD
 export async function saveRemoteSnapshot(state: AppState): Promise<string> {
   const client = getSupabaseClient();
   if (!client) throw new Error("Синхронизация с Supabase не настроена.");
@@ -90,34 +82,6 @@ export async function saveRemoteSnapshot(state: AppState): Promise<string> {
 
   if (error) {
     throw error;
-=======
-export async function saveRemoteSnapshot(state: AppState): Promise<string | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
-
-  try {
-    const { data, error } = await client
-      .from(SYNC_TABLE)
-      .upsert(
-        {
-          id: SYNC_ID,
-          payload: state,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      )
-      .select("updated_at")
-      .single();
-
-    if (error) {
-      throw error;
-    }
-    return String(data.updated_at);
-  } catch (error) {
-    console.error("Не удалось синхронизировать состояние с Supabase.", error);
-    window.dispatchEvent(new CustomEvent("moe-cafe-sync-error", { detail: { message: "Синхронизация с облаком недоступна." } }));
-    return null;
->>>>>>> c66af0f (Commit)
   }
 
   return String(data.updated_at);
