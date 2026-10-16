@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   AppState,
@@ -18,7 +18,8 @@ import { round2, todayISO, uid } from "./utils";
 
 const KEY = "moe-cafe-v8";
 const LEGACY_KEY = "moe-cafe-v7";
-const META_KEY = "moe-cafe-sync-meta";
+
+export type SyncStatus = "local" | "connecting" | "synced" | "syncing" | "error";
 
 function readLocal(): AppState {
   for (const key of [KEY, LEGACY_KEY]) {
@@ -81,21 +82,14 @@ function normalize(raw: Partial<AppState>): AppState {
   };
 }
 
-function readLocalMeta(): number {
-  const value = localStorage.getItem(META_KEY);
-  if (!value) return 0;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function writeLocalMeta(value: number) {
-  localStorage.setItem(META_KEY, String(value));
-}
-
 import type { CombinedShoppingList } from "./types";
 
 interface StoreApi {
   state: AppState;
+  syncStatus: SyncStatus;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+  retrySync: () => void;
   saveProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   importProducts: (rows: PriceRowInput[]) => { added: number; updated: number };
@@ -123,44 +117,166 @@ const Ctx = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => readLocal());
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() =>
+    getRemoteSyncEnabled() ? "connecting" : "local",
+  );
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const latestState = useRef(state);
+  const initialState = useRef(state);
+  const lastSyncedState = useRef<string | null>(null);
+  const lastRemoteUpdatedAt = useRef(0);
+  const syncInitialized = useRef(!getRemoteSyncEnabled());
+  const syncInProgress = useRef(false);
+  const syncNow = useRef<(() => Promise<void>) | null>(null);
+  const saveTimer = useRef<number | null>(null);
+  latestState.current = state;
 
   useEffect(() => {
     let cancelled = false;
 
-    const hydrateRemote = async () => {
-      if (!getRemoteSyncEnabled()) return;
+    const synchronize = async () => {
+      if (cancelled || syncInProgress.current || !getRemoteSyncEnabled()) return;
+      syncInProgress.current = true;
+      if (!syncInitialized.current) setSyncStatus("connecting");
 
-      const remote = await loadRemoteSnapshot();
-      if (cancelled || !remote) return;
+      try {
+        const remote = await loadRemoteSnapshot();
+        if (cancelled) return;
 
-      const localUpdatedAt = readLocalMeta();
-      const remoteUpdatedAt = Date.parse(remote.updatedAt);
-      if (!Number.isNaN(remoteUpdatedAt) && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) {
-        setState((current) => {
-          const next = normalize(remote.state);
-          return JSON.stringify(current) === JSON.stringify(next) ? current : next;
-        });
+        const current = latestState.current;
+        const currentSnapshot = JSON.stringify(current);
+
+        if (!syncInitialized.current) {
+          const localChangedWhileLoading = currentSnapshot !== JSON.stringify(initialState.current);
+
+          if (remote) {
+            const remoteUpdatedAt = Date.parse(remote.updatedAt);
+            if (Number.isNaN(remoteUpdatedAt)) {
+              throw new Error("Supabase вернул некорректное время обновления.");
+            }
+
+            const remoteState = normalize(remote.state);
+            const remoteSnapshot = JSON.stringify(remoteState);
+
+            if (localChangedWhileLoading) {
+              if (currentSnapshot !== remoteSnapshot) {
+                setSyncStatus("syncing");
+                const savedAt = await saveRemoteSnapshot(current);
+                lastRemoteUpdatedAt.current = Date.parse(savedAt);
+                lastSyncedState.current = currentSnapshot;
+                setLastSyncedAt(savedAt);
+              } else {
+                lastRemoteUpdatedAt.current = remoteUpdatedAt;
+                lastSyncedState.current = remoteSnapshot;
+                setLastSyncedAt(remote.updatedAt);
+              }
+            } else {
+              lastRemoteUpdatedAt.current = remoteUpdatedAt;
+              lastSyncedState.current = remoteSnapshot;
+              setLastSyncedAt(remote.updatedAt);
+              setState((value) => {
+                const valueSnapshot = JSON.stringify(value);
+                if (valueSnapshot !== currentSnapshot && valueSnapshot !== remoteSnapshot) return value;
+                return valueSnapshot === remoteSnapshot ? value : remoteState;
+              });
+            }
+          } else {
+            setSyncStatus("syncing");
+            const savedAt = await saveRemoteSnapshot(current);
+            lastRemoteUpdatedAt.current = Date.parse(savedAt);
+            lastSyncedState.current = currentSnapshot;
+            setLastSyncedAt(savedAt);
+          }
+
+          syncInitialized.current = true;
+          setSyncError(null);
+          setSyncStatus("synced");
+          return;
+        }
+
+        const isLocallyDirty = currentSnapshot !== lastSyncedState.current;
+        const remoteUpdatedAt = remote ? Date.parse(remote.updatedAt) : 0;
+        if (remote && Number.isNaN(remoteUpdatedAt)) {
+          throw new Error("Supabase вернул некорректное время обновления.");
+        }
+
+        const remoteState = remote ? normalize(remote.state) : null;
+        const remoteSnapshot = remoteState ? JSON.stringify(remoteState) : null;
+        const remoteChanged = remoteSnapshot !== null && remoteSnapshot !== lastSyncedState.current;
+
+        if (remote && remoteState && remoteSnapshot !== null && (remoteUpdatedAt > lastRemoteUpdatedAt.current || remoteChanged)) {
+          lastRemoteUpdatedAt.current = remoteUpdatedAt;
+          if (isLocallyDirty) {
+            setSyncStatus("syncing");
+            const savedAt = await saveRemoteSnapshot(current);
+            lastRemoteUpdatedAt.current = Date.parse(savedAt);
+            lastSyncedState.current = currentSnapshot;
+            setLastSyncedAt(savedAt);
+          } else {
+            const previousSnapshot = lastSyncedState.current;
+            lastSyncedState.current = remoteSnapshot;
+            setLastSyncedAt(remote.updatedAt);
+            setState((value) => {
+              const valueSnapshot = JSON.stringify(value);
+              if (valueSnapshot !== previousSnapshot && valueSnapshot !== remoteSnapshot) return value;
+              return valueSnapshot === remoteSnapshot ? value : remoteState;
+            });
+          }
+        } else if (!remote || isLocallyDirty) {
+          setSyncStatus("syncing");
+          const savedAt = await saveRemoteSnapshot(current);
+          lastRemoteUpdatedAt.current = Date.parse(savedAt);
+          lastSyncedState.current = currentSnapshot;
+          setLastSyncedAt(savedAt);
+        } else {
+          lastRemoteUpdatedAt.current = Math.max(lastRemoteUpdatedAt.current, remoteUpdatedAt);
+          setLastSyncedAt(remote?.updatedAt ?? null);
+        }
+
+        setSyncError(null);
+        setSyncStatus("synced");
+      } catch (error) {
+        console.error("Ошибка синхронизации с Supabase.", error);
+        setSyncError(error instanceof Error ? error.message : "Не удалось связаться с Supabase.");
+        setSyncStatus("error");
+      } finally {
+        syncInProgress.current = false;
       }
     };
 
-    void hydrateRemote();
+    syncNow.current = synchronize;
+    void synchronize();
+    const interval = window.setInterval(() => void synchronize(), 3000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void synchronize();
+    };
+    window.addEventListener("online", synchronize);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       cancelled = true;
+      syncNow.current = null;
+      window.clearInterval(interval);
+      window.removeEventListener("online", synchronize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
   useEffect(() => {
+    const snapshot = JSON.stringify(state);
     try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-      writeLocalMeta(Date.now());
+      localStorage.setItem(KEY, snapshot);
     } catch (error) {
       console.error("Не удалось сохранить данные приложения.", error);
       window.dispatchEvent(new CustomEvent("moe-cafe-storage-error"));
     }
 
-    if (getRemoteSyncEnabled()) {
-      void saveRemoteSnapshot(state);
-    }
+    if (!getRemoteSyncEnabled() || !syncInitialized.current) return;
+    if (snapshot === lastSyncedState.current) return;
+
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => void syncNow.current?.(), 500);
   }, [state]);
 
   const saveProduct = (p: Product) => {
@@ -468,6 +584,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, requisites: r }));
   };
 
+  const retrySync = () => {
+    void syncNow.current?.();
+  };
+
   const usageInRecipes = (productId: string) =>
     state.recipes.filter((r) => r.ingredients.some((i) => i.productId === productId)).length;
 
@@ -476,6 +596,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const api: StoreApi = {
     state,
+    syncStatus,
+    lastSyncedAt,
+    syncError,
+    retrySync,
     saveProduct,
     deleteProduct,
     importProducts,
