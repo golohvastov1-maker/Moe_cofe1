@@ -390,12 +390,35 @@ function CustomServiceModal({ open, onClose, onAdd }: { open: boolean; onClose: 
 }
 
 function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sortMode: "category" | "place") => void }) {
-  const { state, setShoppingStatus, setPurchasePlace } = useStore();
+  const { state, saveEvent, setShoppingStatus, setPurchasePlace } = useStore();
   const toast = useToast();
   const [sortMode, setSortMode] = useState<"category" | "place">("category");
+  const [extraProductId, setExtraProductId] = useState("");
+  const [extraAmount, setExtraAmount] = useState("");
   const shopping = buildShopping(ev, state.recipes, state.products);
+  const extraProduct = state.products.find((product) => product.id === extraProductId);
   const bought = new Set(ev.bought ?? []);
   const inStock = new Set(ev.inStock ?? []);
+  const addExtraItem = () => {
+    const amount = parseNum(extraAmount);
+    if (!extraProduct || amount <= 0) return;
+    saveEvent({
+      ...ev,
+      additionalShoppingItems: [
+        ...(ev.additionalShoppingItems ?? []),
+        { id: uid(), productId: extraProduct.id, amount },
+      ],
+    });
+    setExtraAmount("");
+    toast("Позиция добавлена в закупки");
+  };
+  const removeExtraItem = (id: string) => {
+    saveEvent({
+      ...ev,
+      additionalShoppingItems: (ev.additionalShoppingItems ?? []).filter((item) => item.id !== id),
+    });
+    toast("Дополнительная позиция удалена", "info");
+  };
   const toggle = (field: "bought" | "inStock", productId: string) => {
     setShoppingStatus([ev.id], productId, field, !ev[field]?.includes(productId));
   };
@@ -412,6 +435,40 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
         {DOCS.map((d, i) => (<button key={d.kind} onClick={() => onOpenDoc(d.kind, sortMode)} className="reveal card-hover rounded-[16px] border border-line bg-pine-800 p-4 text-left" style={{ animationDelay: `${i * 60}ms` }}><d.Icon size={20} className="text-saffron" /><p className="mt-2.5 font-display text-[14px] leading-snug">{d.title}</p><p className="mt-1 text-[11px] leading-relaxed text-sage">{d.desc}</p></button>))}
       </div>
       <div className="reveal">
+        <div className="mb-4 rounded-[14px] border border-line bg-pine-800 p-3.5">
+          <h2 className="font-display text-[14px] text-cream">Дополнительные позиции</h2>
+          <p className="mt-1 text-[11px] leading-relaxed text-sage">Добавьте продукты, которые нужно закупить помимо состава блюд. Для кг укажите граммы, для л — миллилитры.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+            <select aria-label="Продукт для дополнительной закупки" value={extraProductId} onChange={(event) => setExtraProductId(event.target.value)} className={inputCls}>
+              <option value="">Выберите продукт…</option>
+              {state.products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.category}</option>)}
+            </select>
+            <input
+              aria-label={`Количество${extraProduct ? `, ${amountUnitLabel(extraProduct.unit)}` : ""}`}
+              value={extraAmount}
+              onChange={(event) => setExtraAmount(event.target.value)}
+              inputMode="decimal"
+              placeholder={extraProduct ? `Количество, ${amountUnitLabel(extraProduct.unit)}` : "Количество"}
+              className={inputCls}
+            />
+            <button onClick={addExtraItem} disabled={!extraProduct || parseNum(extraAmount) <= 0} className="tap flex items-center justify-center gap-1.5 rounded-[11px] bg-saffron px-3.5 py-2.5 text-[12px] font-bold text-pine-950 disabled:opacity-40"><IcPlus size={15} /> Добавить</button>
+          </div>
+          {(ev.additionalShoppingItems ?? []).length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {(ev.additionalShoppingItems ?? []).map((item) => {
+                const product = state.products.find((entry) => entry.id === item.productId);
+                if (!product) return null;
+                return (
+                  <div key={item.id} className="flex items-center gap-2 rounded-[9px] bg-pine-850 px-3 py-2">
+                    <span className="min-w-0 grow truncate text-[12px] text-cream">{product.name} · {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount)}</span>
+                    <span className="shrink-0 text-[11px] text-sage">{fmtMoney(ingredientCost({ productId: product.id, amount: item.amount }, state.products))}</span>
+                    <button onClick={() => removeExtraItem(item.id)} aria-label={`Удалить дополнительную позицию ${product.name}`} className="tap grid h-7 w-7 shrink-0 place-items-center rounded-full text-sage hover:text-coral"><IcX size={14} /></button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 font-display text-[15px]"><IcCart size={16} className="text-mint" /> Список покупок</h2>
           <div className="flex flex-wrap items-center gap-2">

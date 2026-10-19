@@ -67,6 +67,7 @@ function normalize(raw: Partial<AppState>): AppState {
             guestsPerTable: e.guestsPerTable ?? defaultGuestsPerTable,
             tablesCount: e.tablesCount ?? Math.ceil((e.guests ?? 0) / defaultGuestsPerTable),
             clientItems: e.clientItems ?? [],
+            additionalShoppingItems: e.additionalShoppingItems ?? [],
             bought: e.bought ?? [],
             inStock: e.inStock ?? [],
             purchasePlaces: e.purchasePlaces ?? {},

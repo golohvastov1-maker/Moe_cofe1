@@ -169,6 +169,12 @@ export interface EventDish {
   comment?: string;
 }
 
+export interface AdditionalShoppingItem {
+  id: string;
+  productId: string;
+  amount: number;
+}
+
 export interface EventService {
   id: string;
   serviceId: string | null;
@@ -196,6 +202,7 @@ export interface EventPlan {
   tablesCount: number;
   discount: number;
   dishes: EventDish[];
+  additionalShoppingItems?: AdditionalShoppingItem[];
   services: EventService[];
   clientItems: ClientItem[];
   bought: string[];

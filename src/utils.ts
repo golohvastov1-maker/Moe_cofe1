@@ -252,6 +252,14 @@ export function buildShopping(
       map.set(row.productId, entry);
     }
   }
+  for (const item of ev.additionalShoppingItems ?? []) {
+    const product = products.find((p) => p.id === item.productId);
+    if (!product) continue;
+    const entry = map.get(item.productId) ?? { amount: 0, clientAmount: 0, notes: [], dishes: new Map<string, number>() };
+    entry.amount += item.amount;
+    entry.dishes.set("Дополнительная закупка", (entry.dishes.get("Дополнительная закупка") ?? 0) + item.amount);
+    map.set(item.productId, entry);
+  }
   const out: ShoppingRow[] = [];
   for (const [pid, entry] of map) {
     const product = products.find((p) => p.id === pid);
@@ -305,6 +313,16 @@ export function buildMultiShopping(
         entry.amount += row.amount * k;
         entry.perEvent.set(ev.id, (entry.perEvent.get(ev.id) ?? 0) + row.amount * k);
       }
+    }
+    for (const item of ev.additionalShoppingItems ?? []) {
+      if (!products.some((product) => product.id === item.productId)) continue;
+      let entry = map.get(item.productId);
+      if (!entry) {
+        entry = { amount: 0, perEvent: new Map() };
+        map.set(item.productId, entry);
+      }
+      entry.amount += item.amount;
+      entry.perEvent.set(ev.id, (entry.perEvent.get(ev.id) ?? 0) + item.amount);
     }
   }
   const out: MultiShoppingRow[] = [];
@@ -382,6 +400,26 @@ export function buildCombinedShoppingList(
         const currentDishAmount = eventEntry.dishes.get(recipe.name) ?? 0;
         eventEntry.dishes.set(recipe.name, currentDishAmount + totalAmount);
       }
+    }
+    for (const item of ev.additionalShoppingItems ?? []) {
+      const product = products.find((p) => p.id === item.productId);
+      if (!product) continue;
+      let entry = productMap.get(item.productId);
+      if (!entry) {
+        entry = { amount: 0, cost: 0, usedIn: new Map() };
+        productMap.set(item.productId, entry);
+      }
+      entry.amount += item.amount;
+      entry.cost += ingredientCost({ productId: item.productId, amount: item.amount }, products);
+      let eventEntry = entry.usedIn.get(ev.id);
+      if (!eventEntry) {
+        eventEntry = { eventName: ev.name, dishes: new Map() };
+        entry.usedIn.set(ev.id, eventEntry);
+      }
+      eventEntry.dishes.set(
+        "Дополнительная закупка",
+        (eventEntry.dishes.get("Дополнительная закупка") ?? 0) + item.amount,
+      );
     }
   }
   
