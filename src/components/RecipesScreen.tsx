@@ -137,7 +137,7 @@ function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: bool
   const addRow = (productId: string) => { const p = state.products.find((x) => x.id === productId); if (!p) return; const def = p.unit === "кг" ? 500 : p.unit === "л" ? 200 : 1; setRows((rs) => [...rs, { productId, amount: def }]); setPickerOpen(false); };
   const save = () => {
     if (!valid) return;
-    saveRecipe({ id: editing?.id ?? uid(), name: name.trim(), category, description: description.trim(), techNote: techNote.trim(), serving, portions, servingWeight: Math.max(1, parseNum(servingWeight)), markupMode, markupValue: round2(markupValue), hideFromPriceList, ingredients: parsed.map((p) => ({ productId: p.productId, amount: round2(p.amount) })) });
+    saveRecipe({ id: editing?.id ?? uid(), name: name.trim(), category, description: description.trim(), techNote: techNote.trim(), serving, portions, servingWeight: Math.max(1, parseNum(servingWeight)), markupMode, markupValue: round2(markupValue), hideFromPriceList, ingredients: parsed.map((p) => ({ productId: p.productId, amount: Math.round(p.amount * 1_000_000) / 1_000_000 })) });
     toast(editing ? "Рецепт сохранён" : "Рецепт добавлен"); onClose();
   };
   const pickerList = state.products.filter((p) => p.name.toLowerCase().includes(pickQ.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, "ru"));

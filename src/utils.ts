@@ -7,7 +7,7 @@ import type {
   Recipe,
   Unit,
 } from "./types";
-import { PRODUCT_CATEGORIES, isWeighed } from "./types";
+import { PRODUCT_CATEGORIES, compareProductCategories, isWeighed } from "./types";
 
 export const uid = () =>
   Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
@@ -107,7 +107,8 @@ export const amountLabel = (amount: number, unit: Unit): string => {
 };
 
 export const pieceAmountLabel = (product: Product, amount: number): string => {
-  const base = `${fmtNum(amount)} ${product.unit}`;
+  const unitAmount = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 6 }).format(amount);
+  const base = `${unitAmount} ${product.unit}`;
   if (product.netWeight && product.netWeight > 0) {
     const totalGrams = amount * product.netWeight;
     return `${base} · ${totalGrams >= 1000 ? `${fmtNum(totalGrams / 1000)} кг` : `${fmtNum(totalGrams)} г`}`;
@@ -279,7 +280,7 @@ export function buildShopping(
     }
   }
   return out.sort((a, b) => {
-    const catOrder = PRODUCT_CATEGORIES.indexOf(a.product.category) - PRODUCT_CATEGORIES.indexOf(b.product.category);
+    const catOrder = compareProductCategories(a.product.category, b.product.category);
     if (catOrder !== 0) return catOrder;
     return a.product.name.localeCompare(b.product.name, "ru");
   });
@@ -341,7 +342,7 @@ export function buildMultiShopping(
     });
   }
   return out.sort((a, b) => {
-    const catOrder = PRODUCT_CATEGORIES.indexOf(a.product.category) - PRODUCT_CATEGORIES.indexOf(b.product.category);
+    const catOrder = compareProductCategories(a.product.category, b.product.category);
     if (catOrder !== 0) return catOrder;
     return a.product.name.localeCompare(b.product.name, "ru");
   });
@@ -459,7 +460,7 @@ export function buildCombinedShoppingList(
     const productB = products.find((p) => p.id === b.productId);
     if (!productA || !productB) return 0;
     
-    const catOrder = PRODUCT_CATEGORIES.indexOf(productA.category) - PRODUCT_CATEGORIES.indexOf(productB.category);
+    const catOrder = compareProductCategories(productA.category, productB.category);
     if (catOrder !== 0) return catOrder;
     return productA.name.localeCompare(productB.name, "ru");
   });
@@ -496,7 +497,7 @@ function normalizeCategory(raw: string): ProductCategory | undefined {
   if (s.startsWith("специ")) return "Специи";
   if (s.includes("масло") || s.includes("соус")) return "Масло и соусы";
   if (s.startsWith("зелен")) return "Зелень";
-  return undefined;
+  return raw.trim();
 }
 
 function normalizeUnit(raw: string): Unit {

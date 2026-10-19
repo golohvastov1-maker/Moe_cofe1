@@ -10,7 +10,9 @@ import type {
   Requisites,
   Service,
   Task,
+  ProductCategory,
 } from "./types";
+import { PRODUCT_CATEGORIES } from "./types";
 import { seedState } from "./data";
 import { getRemoteSyncEnabled, loadRemoteSnapshot, saveRemoteSnapshot } from "./sync";
 import type { PriceRowInput } from "./utils";
@@ -37,14 +39,20 @@ function readLocal(): AppState {
 
 function normalize(raw: Partial<AppState>): AppState {
   const base = seedState;
+  const products = Array.isArray(raw.products)
+    ? raw.products.map((p) => ({
+        ...p,
+        category: p.category ?? "Прочие",
+        netWeight: p.netWeight ?? null,
+      }))
+    : base.products;
+  const productCategories = [...new Set([
+    ...(Array.isArray(raw.productCategories) ? raw.productCategories : PRODUCT_CATEGORIES),
+    ...products.map((product) => product.category),
+  ])];
   return {
-    products: Array.isArray(raw.products)
-      ? raw.products.map((p) => ({
-          ...p,
-          category: p.category ?? ("Прочие" as const),
-          netWeight: p.netWeight ?? null,
-        }))
-      : base.products,
+    products,
+    productCategories,
     categories: Array.isArray(raw.categories) ? raw.categories : base.categories,
     recipes: Array.isArray(raw.recipes)
       ? raw.recipes.map((r) => ({
@@ -93,6 +101,8 @@ interface StoreApi {
   saveProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   importProducts: (rows: PriceRowInput[]) => { added: number; updated: number };
+  saveProductCategory: (oldName: ProductCategory | null, newName: ProductCategory) => void;
+  deleteProductCategory: (name: ProductCategory) => void;
   saveCategory: (c: CategoryInfo) => void;
   deleteCategory: (id: string) => void;
   saveRecipe: (r: Recipe) => void;
@@ -334,16 +344,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((s) => {
       const today = todayISO();
       const products = [...s.products];
+      const productCategories = [...s.productCategories];
       const newLog: PriceLogEntry[] = [];
       const norm = (str: string) => str.trim().toLowerCase().replace(/\s+/g, " ");
 
       for (const row of rows) {
+        const rowCategory = row.category;
+        if (rowCategory && !productCategories.some((category) => category.toLocaleLowerCase("ru") === rowCategory.toLocaleLowerCase("ru"))) {
+          productCategories.push(rowCategory);
+        }
         const idx = products.findIndex((p) => norm(p.name) === norm(row.name));
         if (idx >= 0) {
           const old = products[idx];
           if (old.price !== row.price) {
             newLog.push({ id: uid(), productId: old.id, name: old.name, oldPrice: old.price, newPrice: row.price, date: today });
-            products[idx] = { ...old, price: row.price, category: row.category ?? old.category, updatedAt: today };
+          }
+          const nextCategory = row.category ?? old.category;
+          if (old.price !== row.price || old.category !== nextCategory) {
+            products[idx] = { ...old, price: row.price, category: nextCategory, updatedAt: today };
             updated++;
           }
         } else {
@@ -361,9 +379,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           added++;
         }
       }
-      return { ...s, products, priceLog: [...newLog, ...s.priceLog].slice(0, 300) };
+      return { ...s, products, productCategories, priceLog: [...newLog, ...s.priceLog].slice(0, 300) };
     });
     return { added, updated };
+  };
+
+  const saveProductCategory = (oldName: ProductCategory | null, newName: ProductCategory) => {
+    const normalized = newName.trim();
+    if (!normalized) return;
+    setState((s) => {
+      const existing = s.productCategories.find((category) =>
+        category.toLocaleLowerCase("ru") === normalized.toLocaleLowerCase("ru") &&
+        category !== oldName,
+      );
+      if (existing) return s;
+      const categories = oldName
+        ? s.productCategories.map((category) => category === oldName ? normalized : category)
+        : [...s.productCategories, normalized];
+      return {
+        ...s,
+        productCategories: [...new Set(categories)],
+        products: oldName
+          ? s.products.map((product) => product.category === oldName ? { ...product, category: normalized } : product)
+          : s.products,
+      };
+    });
+  };
+
+  const deleteProductCategory = (name: ProductCategory) => {
+    setState((s) => {
+      if (s.productCategories.length <= 1) return s;
+      const fallback = name === "Прочие"
+        ? s.productCategories.find((category) => category !== name)!
+        : s.productCategories.includes("Прочие") ? "Прочие" : s.productCategories.find((category) => category !== name)!;
+      return {
+        ...s,
+        productCategories: s.productCategories.filter((category) => category !== name),
+        products: s.products.map((product) => product.category === name ? { ...product, category: fallback } : product),
+      };
+    });
   };
 
   const saveCategory = (c: CategoryInfo) => {
@@ -603,6 +657,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveProduct,
     deleteProduct,
     importProducts,
+    saveProductCategory,
+    deleteProductCategory,
     saveCategory,
     deleteCategory,
     saveRecipe,

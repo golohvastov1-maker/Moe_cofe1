@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Category, DocKind, EventPlan, IngredientRow } from "../types";
-import { EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
+import { EVENT_TYPE_STYLE, MENU_ORDER, amountUnitLabel, catStyle, compareProductCategories, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
 import { amountLabel, buildShopping, comparePurchasePlaces, eventSummary, fmtDateShort, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, todayISO, uid } from "../utils";
 import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, textareaCls, useCountUp, useToast } from "./UI";
@@ -488,7 +488,7 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
                 else groups.set(key, [row]);
               }
               const sortedGroups = Array.from(groups.keys()).sort((a, b) => sortMode === "category"
-                ? PRODUCT_CATEGORIES.indexOf(a as any) - PRODUCT_CATEGORIES.indexOf(b as any)
+                ? compareProductCategories(a, b, state.productCategories)
                 : comparePurchasePlaces(a, b));
               return sortedGroups.map((groupName) => {
                 const items = groups.get(groupName)!;

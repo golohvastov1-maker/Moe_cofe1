@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CategoryInfo, Product, ProductCategory, Unit } from "../types";
-import { PRODUCT_CATEGORIES, UNITS, amountUnitLabel, productCatColor } from "../types";
+import { UNITS, amountUnitLabel, productCatColor } from "../types";
 import { useStore } from "../store";
 import { downloadText, fmtDateShort, fmtMoney, fmtNum, parseNum, parsePriceFile, productsToCsv, round2, todayISO, uid } from "../utils";
 import { DangerConfirm, EmptyState, Field, Modal, Segmented, inputCls, selectCls, useToast } from "./UI";
-import { IcBasket, IcBriefcase, IcClock, IcDoc, IcDownload, IcPlus, IcSearch, IcUpload } from "./Icons";
+import { IcBasket, IcBriefcase, IcClock, IcDoc, IcDownload, IcPencil, IcPlus, IcSearch, IcUpload } from "./Icons";
 
 // ===== PRODUCTS SCREEN =====
 export function ProductsScreen() {
@@ -15,6 +15,7 @@ export function ProductsScreen() {
   const [unitFilter, setUnitFilter] = useState<Unit | "все">("все");
   const [sortMode, setSortMode] = useState<"abc" | "cat">("cat");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -52,6 +53,7 @@ export function ProductsScreen() {
           <button onClick={() => fileRef.current?.click()} disabled={importing} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint disabled:opacity-50 sm:px-3.5"><IcUpload size={15} /> <span className="hidden md:inline">{importing ? "Читаем…" : "Импорт CSV/XLSX"}</span></button>
           <button onClick={() => { downloadText("price-list.csv", productsToCsv(sorted)); toast("Прайс-лист выгружен"); }} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint sm:px-3.5"><IcDownload size={15} /> <span className="hidden md:inline">Экспорт</span></button>
           <button onClick={() => { downloadText("price-template.csv", productsToCsv([])); toast("Шаблон загрузки продуктов скачан"); }} title="Пустой CSV-шаблон: название, единица, цена и категория" className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:text-cream sm:px-3.5"><IcDoc size={15} /> <span className="hidden md:inline">Шаблон</span></button>
+          <button onClick={() => setCategoriesOpen(true)} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:text-cream sm:px-3.5"><IcPencil size={15} /> <span className="hidden md:inline">Категории</span></button>
           <button onClick={() => { setEditing(null); setSheetOpen(true); }} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Продукт</button>
         </div>
       </header>
@@ -61,7 +63,7 @@ export function ProductsScreen() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по продуктам…" className={inputCls + " pl-10"} />
         </div>
         <Segmented options={[{ value: "abc" as const, label: "По алфавиту" }, { value: "cat" as const, label: "По категориям" }]} value={sortMode} onChange={setSortMode} />
-        <select value={catFilter} onChange={(e) => setCatFilter(e.target.value as ProductCategory | "все")} className={inputCls + " w-[190px] py-2.5 text-[12.5px]"}><option value="все">Все категории</option>{PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c} · {catCounts.get(c) ?? 0}</option>))}</select>
+        <select value={catFilter} onChange={(e) => setCatFilter(e.target.value as ProductCategory | "все")} className={inputCls + " w-[190px] py-2.5 text-[12.5px]"}><option value="все">Все категории</option>{state.productCategories.map((c) => (<option key={c} value={c}>{c} · {catCounts.get(c) ?? 0}</option>))}</select>
         <div className="flex flex-wrap gap-1.5">{(["все", ...UNITS] as const).map((u) => (<button key={u} onClick={() => setUnitFilter(u)} className={`tap rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${unitFilter === u ? "border-saffron/60 bg-saffron/15 text-saffron" : "border-line bg-pine-800 text-sage hover:text-cream"}`}>{u}</button>))}</div>
         {hasFilters && <button onClick={() => { setQ(""); setCatFilter("все"); setUnitFilter("все"); }} className="tap rounded-full border border-line px-3 py-1.5 text-[11.5px] font-semibold text-sage hover:text-coral">Сбросить</button>}
       </div>
@@ -71,7 +73,7 @@ export function ProductsScreen() {
         <p className="reveal mt-10 text-center text-[13px] text-sage">По запросу ничего не нашлось</p>
       ) : sortMode === "cat" ? (
         <div className="mt-5 space-y-6">
-          {PRODUCT_CATEGORIES.map((c) => {
+          {state.productCategories.map((c) => {
             const items = filtered.filter((p) => p.category === c);
             if (items.length === 0) return null;
             const color = productCatColor(c);
@@ -124,6 +126,12 @@ export function ProductsScreen() {
         </div>
       )}
       <ProductSheet open={sheetOpen} onClose={() => setSheetOpen(false)} editing={editing} onSave={saveProduct} />
+      <ProductCategoriesManager
+        open={categoriesOpen}
+        onClose={() => setCategoriesOpen(false)}
+        onRename={(oldName, newName) => setCatFilter((current) => current === oldName ? newName : current)}
+        onDelete={(name) => setCatFilter((current) => current === name ? "все" : current)}
+      />
     </section>
   );
 }
@@ -136,7 +144,7 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
   const [category, setCategory] = useState<ProductCategory>("Прочие");
   const [price, setPrice] = useState("");
   const [netWeight, setNetWeight] = useState("");
-  const piece = unit === "шт" || unit === "упак" || unit === "пучок";
+  const piece = unit === "шт" || unit === "упак" || unit === "пучок" || unit === "зубчик";
   useEffect(() => {
     if (open) {
       setName(editing?.name ?? ""); setUnit(editing?.unit ?? "кг");
@@ -188,13 +196,84 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
             </span>
           )}
         </Field>
-        <Field label="Категория"><div className="flex flex-wrap gap-1.5">{PRODUCT_CATEGORIES.map((c) => (<button key={c} onClick={() => setCategory(c)} className={`tap rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${category === c ? "" : "border-line bg-pine-700 text-sage hover:text-cream"}`} style={category === c ? { borderColor: productCatColor(c), background: `${productCatColor(c)}1f`, color: productCatColor(c) } : undefined}>{c}</button>))}</div></Field>
+        <Field label="Категория"><div className="flex flex-wrap gap-1.5">{state.productCategories.map((c) => (<button key={c} onClick={() => setCategory(c)} className={`tap rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${category === c ? "" : "border-line bg-pine-700 text-sage hover:text-cream"}`} style={category === c ? { borderColor: productCatColor(c), background: `${productCatColor(c)}1f`, color: productCatColor(c) } : undefined}>{c}</button>))}</div></Field>
         <Field label="Единица измерения" hint={`цена за 1 ${unit}`}><div className="grid grid-cols-3 gap-2">{UNITS.map((u) => (<button key={u} onClick={() => setUnit(u)} className={`tap rounded-[11px] border py-2 text-[13px] font-semibold transition-colors ${u === unit ? "border-saffron bg-saffron text-pine-950" : "border-line bg-pine-700 text-sage hover:text-cream"}`}>{u}</button>))}</div></Field>
-        {piece && (<Field label="Масса нетто, г" hint="вес одной штуки/упаковки"><div className="relative"><input value={netWeight} onChange={(e) => setNetWeight(e.target.value)} placeholder="Например, 400" inputMode="numeric" className={inputCls + " pr-10 font-display font-semibold"} /><span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] font-bold text-sage">г</span></div>{netN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">1 {unit} = {netN >= 1000 ? `${fmtNum(netN / 1000)} кг` : `${netN} г`}</span>)}</Field>)}
+        {piece && (<Field label="Масса нетто, г" hint="Укажите вес упаковки, чтобы в рецепте можно было вводить граммы"><div className="relative"><input value={netWeight} onChange={(e) => setNetWeight(e.target.value)} placeholder="Например, 400" inputMode="numeric" className={inputCls + " pr-10 font-display font-semibold"} /><span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] font-bold text-sage">г</span></div>{netN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">1 {unit} = {netN >= 1000 ? `${fmtNum(netN / 1000)} кг` : `${netN} г`}</span>)}</Field>)}
         <Field label="Цена"><div className="relative"><input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" inputMode="decimal" className={inputCls + " pr-10 font-display font-semibold"} /><span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-display text-[13px] font-bold text-saffron">₽</span></div>{priceN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">{fmtMoney(priceN)} за 1 {unit}</span>)}</Field>
         {history.length > 0 && (<div><p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-sage"><IcClock size={13} /> История цены</p><div className="space-y-1.5">{history.map((h) => { const up = h.oldPrice !== null && h.newPrice > h.oldPrice; const down = h.oldPrice !== null && h.newPrice < h.oldPrice; return (<div key={h.id} className="flex items-center justify-between rounded-[10px] border border-line bg-pine-700/60 px-3 py-2 text-[12.5px]"><span className="text-sage">{fmtDateShort(h.date)}</span><span className={up ? "font-semibold text-coral" : down ? "font-semibold text-mint" : "text-sage"}>{h.oldPrice === null ? "создание" : `${fmtMoney(h.oldPrice)} →`} <span className="font-display font-bold text-cream">{fmtMoney(h.newPrice)}</span></span></div>); })}</div></div>)}
       </div>
     </Modal>
+  );
+}
+
+function ProductCategoriesManager({ open, onClose, onRename, onDelete }: {
+  open: boolean;
+  onClose: () => void;
+  onRename: (oldName: string, newName: string) => void;
+  onDelete: (name: string) => void;
+}) {
+  const { state, saveProductCategory, deleteProductCategory } = useStore();
+  const toast = useToast();
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const startNew = () => { setEditing(null); setName(""); setEditorOpen(true); };
+  const startEdit = (category: string) => { setEditing(category); setName(category); setEditorOpen(true); };
+  const save = () => {
+    const normalized = name.trim();
+    if (!normalized) return;
+    const duplicate = state.productCategories.some((category) =>
+      category !== editing && category.toLocaleLowerCase("ru") === normalized.toLocaleLowerCase("ru"),
+    );
+    if (duplicate) {
+      toast("Такая категория уже существует", "del");
+      return;
+    }
+    saveProductCategory(editing, normalized);
+    if (editing) onRename(editing, normalized);
+    toast(editing ? "Категория обновлена" : "Категория добавлена");
+    setEditorOpen(false);
+  };
+  const remove = (category: string) => {
+    deleteProductCategory(category);
+    onDelete(category);
+    toast("Категория удалена; её продукты перенесены в другую категорию", "info");
+  };
+  return (
+    <>
+      <Modal open={open} onClose={onClose} title="Категории продуктов" subtitle="Изменение названия обновит категорию у всех связанных продуктов">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[13px] font-semibold text-cream">Список категорий</p>
+            <button onClick={startNew} className="tap flex items-center gap-1.5 rounded-[10px] bg-saffron px-3 py-1.5 text-[11px] font-bold text-pine-950"><IcPlus size={13} /> Новая</button>
+          </div>
+          <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+            {state.productCategories.map((category) => {
+              const count = state.products.filter((product) => product.category === category).length;
+              return (
+                <div key={category} className="flex items-center gap-2 rounded-[12px] border border-line bg-pine-800 px-3 py-2.5">
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: productCatColor(category) }} />
+                  <span className="min-w-0 grow truncate text-[12.5px] font-semibold text-cream">{category}</span>
+                  <span className="text-[10px] text-sage">{count} прод.</span>
+                  <button onClick={() => startEdit(category)} className="tap rounded-md px-1.5 py-1 text-[10.5px] font-semibold text-sage hover:text-saffron">Изменить</button>
+                  {state.productCategories.length > 1 && <DangerConfirm onConfirm={() => remove(category)} hint="удалить?" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </Modal>
+      {editorOpen && (
+        <Modal open onClose={() => setEditorOpen(false)} title={editing ? "Изменить категорию" : "Новая категория"} footer={
+          <div className="flex items-center gap-3">
+            <button onClick={() => setEditorOpen(false)} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage hover:text-cream">Отмена</button>
+            <button onClick={save} disabled={!name.trim()} className="tap grow rounded-[14px] bg-saffron py-3 font-display text-[13px] font-bold text-pine-950 disabled:opacity-35">Сохранить</button>
+          </div>
+        }>
+          <Field label="Название"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Бакалея" className={inputCls} autoFocus /></Field>
+        </Modal>
+      )}
+    </>
   );
 }
 

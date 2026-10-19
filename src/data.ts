@@ -1,9 +1,10 @@
-import type { AppState } from "./types";
+import { PRODUCT_CATEGORIES, type AppState } from "./types";
 import { addDaysISO } from "./utils";
 
 const d = addDaysISO;
 
 export const seedState: AppState = {
+  productCategories: [...PRODUCT_CATEGORIES],
   categories: [
     { id: "hot", name: "Горячие блюда", color: "#f4a83a", isDefault: true },
     { id: "cold", name: "Холодные закуски", color: "#85c9e8", isDefault: true },

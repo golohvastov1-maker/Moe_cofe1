@@ -206,7 +206,7 @@ export function useCountUp(target: number, duration = 600): number {
 
 export function AmountEditor({ product, value, onChange }: { product: import("../types").Product; value: number; onChange: (v: number) => void }) {
   const weighed = product.unit === "кг" || product.unit === "л";
-  const canSwap = !weighed && (product.unit === "шт" || product.unit === "упак" || product.unit === "пучок") && !!product.netWeight && product.netWeight > 0;
+  const canSwap = !weighed && (product.unit === "шт" || product.unit === "упак" || product.unit === "пучок" || product.unit === "зубчик") && !!product.netWeight && product.netWeight > 0;
   
   // Автоматически определяем режим на основе значения
   const getInitialGramsMode = () => {
@@ -272,7 +272,7 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
       }
     } else if (gramsMode && canSwap) {
       const units = n / (product.netWeight ?? 1);
-      onChange(Math.round(units * 100) / 100);
+      onChange(Math.round(units * 1_000_000) / 1_000_000);
     } else {
       onChange(Math.round(n * 100) / 100);
     }
@@ -311,7 +311,7 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
         className="w-20 rounded-[10px] border border-line bg-pine-800 px-2.5 py-1.5 text-right font-display text-[13px] font-semibold outline-none focus:border-saffron/60" 
       />
       <span className="w-9 text-xs text-sage">{unitLbl}</span>
-      {canSwap && gramsMode && <span className="text-[10px] text-sage">≈ {value.toFixed(1)} {product.unit}</span>}
+      {canSwap && gramsMode && <span className="text-[10px] text-sage">≈ {new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 6 }).format(value)} {product.unit}</span>}
       {canSwap && !gramsMode && product.netWeight && <span className="text-[10px] text-sage">= {value * product.netWeight >= 1000 ? `${(value * product.netWeight / 1000).toFixed(1)} кг` : `${value * product.netWeight} г`}</span>}
       {weighed && !gramsMode && value < 1000 && <span className="text-[10px] text-sage">= {value} г</span>}
       {weighed && gramsMode && value >= 1000 && <span className="text-[10px] text-sage">= {(value / 1000).toFixed(2)} {product.unit}</span>}

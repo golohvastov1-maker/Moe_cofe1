@@ -67,18 +67,7 @@ export const EVENT_TYPE_STYLE: Record<EventType, { fg: string; bg: string }> = {
   Поминки: { fg: "#aebfd2", bg: "rgba(174,191,210,0.13)" },
 };
 
-export type ProductCategory =
-  | "Овощи"
-  | "Фрукты"
-  | "Мясо"
-  | "Рыба"
-  | "Консерванты"
-  | "Молочное"
-  | "Бакалея"
-  | "Специи"
-  | "Масло и соусы"
-  | "Зелень"
-  | "Прочие";
+export type ProductCategory = string;
 
 export const PRODUCT_CATEGORIES: ProductCategory[] = [
   "Овощи",
@@ -110,7 +99,15 @@ export const productCatColor = (c: ProductCategory): string => {
   }
 };
 
-export const isPieceUnit = (u: Unit) => u === "шт" || u === "упак" || u === "пучок";
+export const isPieceUnit = (u: Unit) => u === "шт" || u === "упак" || u === "пучок" || u === "зубчик";
+
+export const compareProductCategories = (a: string, b: string, categories: string[] = PRODUCT_CATEGORIES): number => {
+  const indexA = categories.indexOf(a);
+  const indexB = categories.indexOf(b);
+  const orderA = indexA < 0 ? categories.length : indexA;
+  const orderB = indexB < 0 ? categories.length : indexB;
+  return orderA - orderB || a.localeCompare(b, "ru");
+};
 
 export interface Product {
   id: string;
@@ -253,6 +250,7 @@ export interface Requisites {
 
 export interface AppState {
   products: Product[];
+  productCategories: ProductCategory[];
   priceLog: PriceLogEntry[];
   categories: CategoryInfo[];
   recipes: Recipe[];

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EventPlan, EventType } from "../types";
-import { EVENT_TYPE_STYLE, EVENT_TYPES, PRODUCT_CATEGORIES, isWeighed } from "../types";
+import { EVENT_TYPE_STYLE, EVENT_TYPES, compareProductCategories, isWeighed } from "../types";
 import { useStore } from "../store";
 import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, todayISO, uid } from "../utils";
 import { DangerConfirm, EmptyState, Field, Modal, Segmented, Stepper, StepperInput, inputCls, useToast } from "./UI";
@@ -261,7 +261,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
               else groups.set(key, [item]);
             }
             const sortedGroups = Array.from(groups.keys()).sort((a, b) => sortMode === "category"
-              ? PRODUCT_CATEGORIES.indexOf(a as any) - PRODUCT_CATEGORIES.indexOf(b as any)
+              ? compareProductCategories(a, b, state.productCategories)
               : comparePurchasePlaces(a, b));
             return sortedGroups.map((groupName) => {
               const items = groups.get(groupName)!;

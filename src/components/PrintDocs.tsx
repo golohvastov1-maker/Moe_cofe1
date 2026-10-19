@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { CombinedShoppingList, DocKind, EventPlan } from "../types";
-import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, PRODUCT_CATEGORIES, SERVING_LABEL, amountUnitLabel, catStyle, isPieceUnit, isWeighed } from "../types";
+import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, SERVING_LABEL, amountUnitLabel, catStyle, compareProductCategories, isPieceUnit, isWeighed } from "../types";
 import { useStore } from "../store";
 import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, comparePurchasePlaces, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
 import { IcDownload, IcPrinter, IcX } from "./Icons";
@@ -146,7 +146,7 @@ function ShoppingDoc({ ev, sortMode }: { ev: EventPlan; sortMode: "category" | "
           else groups.set(key, [r]);
         }
         const sortedGroups = Array.from(groups.keys()).sort((a, b) => sortMode === "category"
-          ? PRODUCT_CATEGORIES.indexOf(a as any) - PRODUCT_CATEGORIES.indexOf(b as any)
+          ? compareProductCategories(a, b, state.productCategories)
           : comparePurchasePlaces(a, b));
         return sortedGroups.map((groupName) => {
           const items = groups.get(groupName)!;
@@ -457,7 +457,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
         sortMode === "place"
           ? comparePurchasePlaces(event.purchasePlaces?.[a.product.id], event.purchasePlaces?.[b.product.id])
             || a.product.name.localeCompare(b.product.name, "ru")
-          : PRODUCT_CATEGORIES.indexOf(a.product.category) - PRODUCT_CATEGORIES.indexOf(b.product.category)
+          : compareProductCategories(a.product.category, b.product.category, state.productCategories)
             || a.product.name.localeCompare(b.product.name, "ru"),
       );
       wsData.push(["Сводный список закупок"]);
@@ -694,9 +694,7 @@ function CombinedShoppingDoc({ list }: { list: CombinedShoppingList }) {
           else byCategory.set(cat, [item]);
         }
         const sortedCategories = Array.from(byCategory.keys()).sort((a, b) => {
-          const orderA = PRODUCT_CATEGORIES.indexOf(a as any);
-          const orderB = PRODUCT_CATEGORIES.indexOf(b as any);
-          return orderA - orderB;
+          return compareProductCategories(a, b, state.productCategories);
         });
         return sortedCategories.map((category) => {
           const items = byCategory.get(category)!;
