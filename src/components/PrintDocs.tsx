@@ -87,14 +87,14 @@ function ChefDoc({ ev }: { ev: EventPlan }) {
                           <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{p.name}</td>
                           {d.recipe.serving === "shared" && (
                             <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>
-                              {isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
+                              {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
                             </td>
                           )}
                           <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>
-                            {isWeighed(p.unit) ? amountLabel(displayAmount, p.unit) : `${fmtNum(displayAmount)} ${p.unit}`}
+                            {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(displayAmount, p.unit) : `${fmtNum(displayAmount)} ${p.unit}`}
                           </td>
                           <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
-                            {isWeighed(p.unit) ? amountLabel(total, p.unit) : pieceAmountLabel(p, total)}
+                            {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(total, p.unit) : pieceAmountLabel(p, total)}
                           </td>
                         </tr>
                       );
@@ -441,6 +441,10 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
           d.rows.forEach((row) => {
             const p = state.products.find((x) => x.id === row.productId);
             if (p) {
+              if (row.toTaste) {
+                wsData.push(["", p.name, "По вкусу"]);
+                return;
+              }
               const perPerson = row.amount / d.recipe.portions;
               const total = perPerson * event.guests;
               wsData.push(["", p.name, isWeighed(p.unit) ? amountLabel(total, p.unit) : pieceAmountLabel(p, total)]);

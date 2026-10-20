@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import type { Category, CategoryInfo, MarkupMode, Product, Recipe, ServingStyle } from "../types";
-import { SERVING_LABEL, amountUnitLabel, catStyle, isWeighed } from "../types";
+import type { Category, CategoryInfo, IngredientRow, MarkupMode, Product, Recipe, ServingStyle } from "../types";
+import { SERVING_LABEL, amountUnitLabel, catStyle, compareProductCategories, isWeighed } from "../types";
 import { useStore } from "../store";
 import { amountLabel, downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, recipeCost, recipeFinalPerPortion, recipePerPortion, recipeTotalWeight, round2, uid } from "../utils";
 import { AmountEditor, DangerConfirm, EmptyState, Field, Modal, Segmented, ServingBadge, Stepper, inputCls, selectCls, textareaCls, useToast } from "./UI";
@@ -10,7 +10,7 @@ import { CategoriesManager } from "./Screens";
 import { RecipesPricePreview } from "./PrintDocs";
 
 function compositionStr(r: Recipe, products: Product[]): string {
-  return r.ingredients.map((i) => { const p = products.find((x) => x.id === i.productId); return p ? `${p.name} — ${fmtNum(i.amount)} ${amountUnitLabel(p.unit)} (${fmtMoney(ingredientCost(i, products))})` : null; }).filter(Boolean).join("; ");
+  return r.ingredients.map((i) => { const p = products.find((x) => x.id === i.productId); return p ? `${p.name} — ${i.toTaste ? "по вкусу" : `${fmtNum(i.amount)} ${amountUnitLabel(p.unit)} (${fmtMoney(ingredientCost(i, products))})`}` : null; }).filter(Boolean).join("; ");
 }
 
 export function RecipesScreen() {
@@ -94,7 +94,7 @@ export function RecipesScreen() {
   );
 }
 
-interface RowDraft { productId: string; amount: number; }
+interface RowDraft extends IngredientRow {}
 
 function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: boolean; onClose: () => void; editing: Recipe | null; onPreviewTechCard: (recipe: Recipe) => void }) {
   const { state, saveRecipe, deleteRecipe } = useStore();
@@ -120,12 +120,12 @@ function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: bool
       setServingWeight(editing ? String(editing.servingWeight) : "250");
       setMarkupMode(editing?.markupMode ?? "percent");
       setMarkupValueStr(editing ? String(editing.markupValue).replace(".", ",") : "60");
-      setRows((editing?.ingredients ?? []).map((i) => ({ productId: i.productId, amount: i.amount })));
+      setRows((editing?.ingredients ?? []).map((i) => ({ ...i })));
       setHideFromPriceList(editing?.hideFromPriceList ?? false);
       setPickQ("");
     }
   }, [open, editing]);
-  const parsed = rows.filter((r) => r.amount > 0);
+  const parsed = rows.filter((r) => r.toTaste || r.amount > 0);
   const markupValue = parseNum(markupValueStr);
   const draft: Recipe = { id: editing?.id ?? "draft", name, category, description, techNote, serving, portions, servingWeight: parseNum(servingWeight), markupMode, markupValue, hideFromPriceList, ingredients: parsed };
   const total = recipeCost(draft, state.products);
@@ -133,14 +133,26 @@ function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: bool
   const pricePer = markupMode === "fixed" ? (portions > 0 ? markupValue / portions : 0) : pp * (1 + markupValue / 100);
   const valid = name.trim().length > 0 && parsed.length > 0 && portions >= 1;
   const updateAmount = (idx: number, v: number) => setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, amount: v } : r)));
+  const toggleToTaste = (idx: number, checked: boolean) => setRows((rs) => rs.map((r, i) => {
+    if (i !== idx) return r;
+    const product = state.products.find((item) => item.id === r.productId);
+    const defaultAmount = product?.unit === "кг" ? 500 : product?.unit === "л" ? 200 : 1;
+    return { ...r, toTaste: checked, amount: checked ? 0 : defaultAmount };
+  }));
   const removeRow = (idx: number) => setRows((rs) => rs.filter((_, i) => i !== idx));
   const addRow = (productId: string) => { const p = state.products.find((x) => x.id === productId); if (!p) return; const def = p.unit === "кг" ? 500 : p.unit === "л" ? 200 : 1; setRows((rs) => [...rs, { productId, amount: def }]); setPickerOpen(false); };
   const save = () => {
     if (!valid) return;
-    saveRecipe({ id: editing?.id ?? uid(), name: name.trim(), category, description: description.trim(), techNote: techNote.trim(), serving, portions, servingWeight: Math.max(1, parseNum(servingWeight)), markupMode, markupValue: round2(markupValue), hideFromPriceList, ingredients: parsed.map((p) => ({ productId: p.productId, amount: Math.round(p.amount * 1_000_000) / 1_000_000 })) });
+    saveRecipe({ id: editing?.id ?? uid(), name: name.trim(), category, description: description.trim(), techNote: techNote.trim(), serving, portions, servingWeight: Math.max(1, parseNum(servingWeight)), markupMode, markupValue: round2(markupValue), hideFromPriceList, ingredients: parsed.map((p) => ({ ...p, amount: Math.round(p.amount * 1_000_000) / 1_000_000 })) });
     toast(editing ? "Рецепт сохранён" : "Рецепт добавлен"); onClose();
   };
-  const pickerList = state.products.filter((p) => p.name.toLowerCase().includes(pickQ.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const pickerList = state.products.filter((p) => p.name.toLowerCase().includes(pickQ.trim().toLowerCase())).sort((a, b) =>
+    compareProductCategories(a.category, b.category, state.productCategories) || a.name.localeCompare(b.name, "ru"),
+  );
+  const pickerCategories = [
+    ...state.productCategories.filter((category) => category !== "Прочие"),
+    ...state.productCategories.filter((category) => category === "Прочие"),
+  ];
   const fillStyle = { "--fill": `${(Math.min(markupValue, 300) / 300) * 100}%` } as CSSProperties;
   return (
     <>
@@ -190,7 +202,29 @@ function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: bool
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-sage">Ингредиенты · {rows.length}</p>
             {rows.length === 0 && <p className="rounded-[12px] border border-dashed border-pine-500/70 px-4 py-4 text-center text-[12.5px] text-sage">Состав пуст</p>}
             <div className="space-y-2">
-              {rows.map((r, i) => { const p = state.products.find((x) => x.id === r.productId); if (!p) return null; return (<div key={p.id} className="reveal rounded-[13px] border border-line bg-pine-700/70 p-3"><div className="flex items-center justify-between gap-2"><p className="min-w-0 truncate text-[13.5px] font-semibold text-cream">{p.name}</p><button onClick={() => removeRow(i)} className="tap grid h-6 w-6 shrink-0 place-items-center rounded-full text-sage hover:text-coral"><IcX size={13} /></button></div><div className="mt-2 flex flex-wrap items-center gap-2"><AmountEditor product={p} value={r.amount} onChange={(v) => updateAmount(i, v)} /><span className="ml-auto whitespace-nowrap font-display text-[13px] font-semibold text-saffron">{fmtMoney(ingredientCost({ productId: p.id, amount: r.amount }, state.products))}</span></div><p className="mt-1 text-[10.5px] text-sage">{fmtMoney(p.price)} / {p.unit}</p></div>); })}
+              {rows.map((r, i) => {
+                const p = state.products.find((x) => x.id === r.productId);
+                if (!p) return null;
+                return (
+                  <div key={p.id} className={`reveal rounded-[13px] border bg-pine-700/70 p-3 ${r.toTaste ? "border-saffron/40" : "border-line"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 truncate text-[13.5px] font-semibold text-cream">{p.name}</p>
+                      <button onClick={() => removeRow(i)} className="tap grid h-6 w-6 shrink-0 place-items-center rounded-full text-sage hover:text-coral"><IcX size={13} /></button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {r.toTaste
+                        ? <span className="rounded-full bg-saffron/15 px-2.5 py-1 text-[11px] font-semibold text-saffron">По вкусу · не входит в закупки</span>
+                        : <AmountEditor product={p} value={r.amount} onChange={(v) => updateAmount(i, v)} />}
+                      {!r.toTaste && <span className="ml-auto whitespace-nowrap font-display text-[13px] font-semibold text-saffron">{fmtMoney(ingredientCost({ productId: p.id, amount: r.amount }, state.products))}</span>}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input id={`to-taste-${editing?.id ?? "new"}-${p.id}`} type="checkbox" checked={r.toTaste ?? false} onChange={(event) => toggleToTaste(i, event.target.checked)} className="h-4 w-4 rounded border-line bg-pine-800 accent-saffron" />
+                      <label htmlFor={`to-taste-${editing?.id ?? "new"}-${p.id}`} className="cursor-pointer text-[11px] text-sage">По вкусу (количество не указывается, в закупки не попадает)</label>
+                    </div>
+                    {!r.toTaste && <p className="mt-1 text-[10.5px] text-sage">{fmtMoney(p.price)} / {p.unit}</p>}
+                  </div>
+                );
+              })}
             </div>
             {state.products.length === 0 ? (<p className="mt-3 rounded-[12px] border border-dashed border-coral/40 px-4 py-3 text-center text-[12.5px] text-coral">Сначала заведите продукты</p>) : (<button onClick={() => { setPickQ(""); setPickerOpen(true); }} className="tap mt-2.5 flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-pine-500 py-3 text-[13px] font-semibold text-sage hover:border-saffron/50 hover:text-cream"><IcPlus size={16} /> Добавить ингредиент</button>)}
           </div>
@@ -198,8 +232,33 @@ function RecipeSheet({ open, onClose, editing, onPreviewTechCard }: { open: bool
       </Modal>
       <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Выбрать продукт" subtitle="Цены подтянутся из базы">
         <div className="relative"><IcSearch size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sage" /><input value={pickQ} onChange={(e) => setPickQ(e.target.value)} placeholder="Поиск по базе…" className={inputCls + " pl-10"} autoFocus /></div>
-        <div className="mt-3 space-y-2 pb-2">
-          {pickerList.map((p) => { const added = rows.some((r) => r.productId === p.id); return (<button key={p.id} disabled={added} onClick={() => addRow(p.id)} className={`tap flex w-full items-center gap-3 rounded-[12px] border px-3.5 py-2.5 text-left transition-colors ${added ? "border-mint/25 bg-mint/6 opacity-60" : "border-line bg-pine-800 hover:border-saffron/40"}`}><span className="min-w-0 grow"><span className="block truncate text-[13.5px] font-semibold text-cream">{p.name}</span><span className="text-[11px] text-sage">{fmtMoney(p.price)} / {p.unit} · {p.category}</span></span>{added ? (<span className="shrink-0 text-[11px] font-bold text-mint">добавлен</span>) : (<IcPlus size={16} className="shrink-0 text-saffron" />)}</button>); })}
+        <div className="mt-3 max-h-[55vh] space-y-4 overflow-y-auto pb-2">
+          {pickerCategories.map((productCategory) => {
+            const categoryProducts = pickerList.filter((product) => product.category === productCategory);
+            if (categoryProducts.length === 0) return null;
+            return (
+              <div key={productCategory}>
+                <h3 className="sticky top-0 z-[1] mb-2 bg-pine-900 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-mint">{productCategory}</h3>
+                <div className="space-y-2">
+                  {categoryProducts.map((p) => {
+                    const added = rows.some((r) => r.productId === p.id);
+                    return <button key={p.id} disabled={added} onClick={() => addRow(p.id)} className={`tap flex w-full items-center gap-3 rounded-[12px] border px-3.5 py-2.5 text-left transition-colors ${added ? "border-mint/25 bg-mint/6 opacity-60" : "border-line bg-pine-800 hover:border-saffron/40"}`}><span className="min-w-0 grow"><span className="block truncate text-[13.5px] font-semibold text-cream">{p.name}</span><span className="text-[11px] text-sage">{fmtMoney(p.price)} / {p.unit}</span></span>{added ? <span className="shrink-0 text-[11px] font-bold text-mint">добавлен</span> : <IcPlus size={16} className="shrink-0 text-saffron" />}</button>;
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {pickerList.filter((product) => !state.productCategories.includes(product.category)).length > 0 && (
+            <div>
+              <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-mint">Другие категории</h3>
+              <div className="space-y-2">
+                {pickerList.filter((product) => !state.productCategories.includes(product.category)).map((p) => {
+                  const added = rows.some((r) => r.productId === p.id);
+                  return <button key={p.id} disabled={added} onClick={() => addRow(p.id)} className={`tap flex w-full items-center gap-3 rounded-[12px] border px-3.5 py-2.5 text-left transition-colors ${added ? "border-mint/25 bg-mint/6 opacity-60" : "border-line bg-pine-800 hover:border-saffron/40"}`}><span className="min-w-0 grow"><span className="block truncate text-[13.5px] font-semibold text-cream">{p.name}</span><span className="text-[11px] text-sage">{fmtMoney(p.price)} / {p.unit}</span></span>{added ? <span className="shrink-0 text-[11px] font-bold text-mint">добавлен</span> : <IcPlus size={16} className="shrink-0 text-saffron" />}</button>;
+                })}
+              </div>
+            </div>
+          )}
           {pickerList.length === 0 && <p className="py-6 text-center text-[13px] text-sage">Ничего не нашлось</p>}
         </div>
       </Modal>
@@ -227,6 +286,7 @@ function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => v
         ...recipe.ingredients.flatMap((row) => {
           const product = state.products.find((item) => item.id === row.productId);
           if (!product) return [];
+          if (row.toTaste) return [[product.name, "По вкусу", "По вкусу"]];
           const perPortion = row.amount / recipe.portions;
           return [[
             product.name,
@@ -292,10 +352,10 @@ function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => v
                     <tr key={row.productId} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
                       <td className="border-b py-1.5 pr-2" style={{ borderColor: "#e0d5c8" }}>{p.name}</td>
                       <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: "#e0d5c8" }}>
-                        {isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
+                        {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
                       </td>
                       <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: "#e0d5c8" }}>
-                        {isWeighed(p.unit) ? amountLabel(row.amount, p.unit) : pieceAmountLabel(p, row.amount)}
+                        {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(row.amount, p.unit) : pieceAmountLabel(p, row.amount)}
                       </td>
                     </tr>
                   );

@@ -237,6 +237,12 @@ function IngredientEditor({ ev, recipeId, onClose }: { ev: EventPlan; recipeId: 
   const overridden = rows !== null || dish.overrides !== null;
   const costPer = current.reduce((s, row) => s + ingredientCost(row, state.products), 0) / Math.max(1, recipe.portions);
   const setRow = (idx: number, patch: Partial<IngredientRow>) => setRows(current.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const setToTaste = (idx: number, checked: boolean) => setRows(current.map((row, i) => {
+    if (i !== idx) return row;
+    const product = state.products.find((item) => item.id === row.productId);
+    const defaultAmount = product?.unit === "кг" ? 500 : product?.unit === "л" ? 200 : 1;
+    return { ...row, toTaste: checked, amount: checked ? 0 : row.amount || defaultAmount };
+  }));
   const removeRow = (idx: number) => setRows(current.filter((_, i) => i !== idx));
   const swap = (oldId: string, newId: string) => { setRows(current.map((r) => (r.productId === oldId ? { ...r, productId: newId } : r))); setSwapFor(null); };
   const save = () => { saveEvent({ ...ev, dishes: ev.dishes.map((d) => (d.recipeId === recipe.id ? { ...d, overrides: rows ?? d.overrides, comment: comment.trim() || undefined } : d)) }); toast("Состав блюда сохранён для этого мероприятия"); onClose(); };
@@ -252,7 +258,40 @@ function IngredientEditor({ ev, recipeId, onClose }: { ev: EventPlan; recipeId: 
       }>
         <div className="mb-3 rounded-[12px] border border-line bg-pine-800 px-3.5 py-2.5 text-[12px] text-sage">Себестоимость с чел-ка по этому составу: <span className="font-display font-bold text-mint">{fmtMoney(costPer)}</span><span className="text-sage"> · на {dish.portions} порций</span></div>
         <div className="space-y-2">
-          {current.map((row, i) => { const p = state.products.find((x) => x.id === row.productId); if (!p) return null; return (<div key={row.productId + i} className={`rounded-[13px] border bg-pine-700/70 p-3 ${row.clientProvided ? "border-glacier/40" : "border-line"}`}><div className="flex items-center justify-between gap-2"><p className="min-w-0 truncate text-[13.5px] font-semibold text-cream">{p.name}{row.clientProvided && <span className="ml-2 rounded-full bg-glacier/20 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">клиент</span>}</p><div className="flex shrink-0 items-center gap-1"><button onClick={() => setSwapFor(row.productId)} className="tap rounded-[9px] border border-line px-2 py-1 text-[10.5px] font-semibold text-sage hover:border-saffron/40 hover:text-saffron">заменить</button><button onClick={() => removeRow(i)} aria-label="Убрать" className="tap grid h-6 w-6 place-items-center rounded-full text-sage hover:text-coral"><IcX size={13} /></button></div></div><div className="mt-2 flex flex-wrap items-center gap-2"><AmountEditor product={p} value={row.amount} onChange={(v) => setRow(i, { amount: v })} /><span className="ml-auto whitespace-nowrap font-display text-[13px] font-semibold text-saffron">{fmtMoney(ingredientCost(row, state.products))}</span></div><div className="mt-2 flex items-center gap-2"><label className="flex cursor-pointer items-center gap-2 text-[11px] text-sage"><input type="checkbox" checked={row.clientProvided ?? false} onChange={(e) => setRow(i, { clientProvided: e.target.checked })} className="h-4 w-4 rounded border-line bg-pine-800 accent-glacier" />Привозит/готовит клиент</label></div></div>); })}
+          {current.map((row, i) => {
+            const p = state.products.find((x) => x.id === row.productId);
+            if (!p) return null;
+            return (
+              <div key={row.productId + i} className={`rounded-[13px] border bg-pine-700/70 p-3 ${row.clientProvided ? "border-glacier/40" : "border-line"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-[13.5px] font-semibold text-cream">
+                    {p.name}
+                    {row.clientProvided && <span className="ml-2 rounded-full bg-glacier/20 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">клиент</span>}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button onClick={() => setSwapFor(row.productId)} className="tap rounded-[9px] border border-line px-2 py-1 text-[10.5px] font-semibold text-sage hover:border-saffron/40 hover:text-saffron">заменить</button>
+                    <button onClick={() => removeRow(i)} aria-label="Убрать" className="tap grid h-6 w-6 place-items-center rounded-full text-sage hover:text-coral"><IcX size={13} /></button>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {row.toTaste
+                    ? <span className="rounded-full bg-saffron/15 px-2.5 py-1 text-[11px] font-semibold text-saffron">По вкусу · не входит в закупки</span>
+                    : <AmountEditor product={p} value={row.amount} onChange={(v) => setRow(i, { amount: v })} />}
+                  {!row.toTaste && <span className="ml-auto whitespace-nowrap font-display text-[13px] font-semibold text-saffron">{fmtMoney(ingredientCost(row, state.products))}</span>}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-[11px] text-sage">
+                    <input type="checkbox" checked={row.toTaste ?? false} onChange={(e) => setToTaste(i, e.target.checked)} className="h-4 w-4 rounded border-line bg-pine-800 accent-saffron" />
+                    По вкусу (без количества и закупки)
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-[11px] text-sage">
+                    <input type="checkbox" checked={row.clientProvided ?? false} onChange={(e) => setRow(i, { clientProvided: e.target.checked })} className="h-4 w-4 rounded border-line bg-pine-800 accent-glacier" />
+                    Привозит/готовит клиент
+                  </label>
+                </div>
+              </div>
+            );
+          })}
           {current.length === 0 && <p className="rounded-[12px] border border-dashed border-pine-500/70 px-4 py-4 text-center text-[12.5px] text-sage">Состав пуст</p>}
         </div>
         <div className="mt-4">

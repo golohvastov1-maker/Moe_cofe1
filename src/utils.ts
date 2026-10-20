@@ -93,6 +93,7 @@ export const plural = (n: number, forms: [string, string, string]): string => {
 };
 
 export const ingredientCost = (row: IngredientRow, products: Product[]): number => {
+  if (row.toTaste) return 0;
   const p = products.find((x) => x.id === row.productId);
   if (!p) return 0;
   if (isWeighed(p.unit)) return (row.amount / 1000) * p.price;
@@ -132,6 +133,7 @@ export const recipeFinalPerPortion = (r: Recipe, products: Product[]): number =>
 
 export const recipeTotalWeight = (r: Recipe, products: Product[]): number => {
   return r.ingredients.reduce((sum, row) => {
+    if (row.toTaste) return sum;
     const p = products.find((x) => x.id === row.productId);
     if (!p) return sum;
     if (isWeighed(p.unit)) {
@@ -239,6 +241,7 @@ export function buildShopping(
     const k = dish.portions / recipe.portions;
     const rows = dish.overrides ?? recipe.ingredients;
     for (const row of rows) {
+      if (row.toTaste) continue;
       const existing = map.get(row.productId);
       const entry = existing ?? { amount: 0, clientAmount: 0, notes: [], dishes: new Map<string, number>() };
       const totalAmount = row.amount * k;
@@ -306,6 +309,7 @@ export function buildMultiShopping(
       const k = dish.portions / recipe.portions;
       const rows = dish.overrides ?? recipe.ingredients;
       for (const row of rows) {
+        if (row.toTaste) continue;
         let entry = map.get(row.productId);
         if (!entry) {
           entry = { amount: 0, perEvent: new Map() };
@@ -376,7 +380,7 @@ export function buildCombinedShoppingList(
       const rows = dish.overrides ?? recipe.ingredients;
       
       for (const row of rows) {
-        if (row.clientProvided) continue; // Пропускаем продукты клиента
+        if (row.clientProvided || row.toTaste) continue; // Пропускаем продукты клиента и позиции "по вкусу"
         
         const product = products.find((p) => p.id === row.productId);
         if (!product) continue;

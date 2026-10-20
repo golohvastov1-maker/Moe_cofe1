@@ -132,6 +132,7 @@ export interface IngredientRow {
   productId: string;
   amount: number;
   clientProvided?: boolean;
+  toTaste?: boolean;
 }
 
 export type MarkupMode = "percent" | "fixed";
