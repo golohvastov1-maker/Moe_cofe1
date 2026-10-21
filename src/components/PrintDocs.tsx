@@ -118,7 +118,7 @@ function ChefDoc({ ev }: { ev: EventPlan }) {
 
 function ShoppingDoc({ ev, sortMode }: { ev: EventPlan; sortMode: "category" | "place" }) {
   const { state, setShoppingStatus } = useStore();
-  const rows = buildShopping(ev, state.recipes, state.products);
+  const rows = buildShopping(ev, state.recipes, state.products, state.productCategories);
   const bought = ev.bought ?? [];
   const inStock = ev.inStock ?? [];
   const toggle = (pid: string, kind: "bought" | "stock") => {
@@ -457,7 +457,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
         });
       });
     } else if (kind === "shopping") {
-      const rows = buildShopping(event, state.recipes, state.products).sort((a, b) =>
+      const rows = buildShopping(event, state.recipes, state.products, state.productCategories).sort((a, b) =>
         sortMode === "place"
           ? comparePurchasePlaces(event.purchasePlaces?.[a.product.id], event.purchasePlaces?.[b.product.id])
             || a.product.name.localeCompare(b.product.name, "ru")
@@ -570,7 +570,7 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
   const [showNameInput, setShowNameInput] = useState(true);
   
   const handleCreate = () => {
-    const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
+    const list = buildCombinedShoppingList(listName, events, state.recipes, state.products, undefined, state.productCategories);
     saveCombinedShoppingList(list);
     setShowNameInput(false);
   };
@@ -582,7 +582,7 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
       return null;
     });
     if (!XLSX) return;
-    const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
+    const list = buildCombinedShoppingList(listName, events, state.recipes, state.products, undefined, state.productCategories);
     
     const wsData: any[][] = [
       [list.name],
@@ -592,7 +592,7 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
     ];
     
     list.items.forEach((item) => {
-      const product = state.products.find((p) => p.id === item.productId);
+      const product = state.products.find((p) => p.id === item.productId) ?? item.customProduct;
       if (!product) return;
       
       const usageList = item.usedIn.map((u) => {
@@ -664,7 +664,7 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
     );
   }
   
-  const list = buildCombinedShoppingList(listName, events, state.recipes, state.products);
+  const list = buildCombinedShoppingList(listName, events, state.recipes, state.products, undefined, state.productCategories);
   
   return (
     <PreviewShell title={list.name} subtitle={`${events.length} ${plural(events.length, ["мероприятие", "мероприятия", "мероприятий"])} · ингредиенты суммированы`} onClose={onClose} onExportExcel={exportToExcel}>
@@ -690,7 +690,7 @@ function CombinedShoppingDoc({ list }: { list: CombinedShoppingList }) {
       {(() => {
         const byCategory = new Map<string, typeof list.items>();
         for (const item of list.items) {
-          const product = state.products.find((p) => p.id === item.productId);
+          const product = state.products.find((p) => p.id === item.productId) ?? item.customProduct;
           if (!product) continue;
           const cat = product.category;
           const arr = byCategory.get(cat);
@@ -722,7 +722,7 @@ function CombinedShoppingDoc({ list }: { list: CombinedShoppingList }) {
                 </thead>
                 <tbody>
                   {items.map((item, idx) => {
-                    const product = state.products.find((p) => p.id === item.productId);
+                    const product = state.products.find((p) => p.id === item.productId) ?? item.customProduct;
                     if (!product) return null;
                     return (
                       <tr key={item.productId} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>

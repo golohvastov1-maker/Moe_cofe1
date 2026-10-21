@@ -1,6 +1,7 @@
 import type {
   EventPlan,
   EventService,
+  AdditionalShoppingItem,
   IngredientRow,
   Product,
   ProductCategory,
@@ -229,10 +230,34 @@ export interface ShoppingRow {
   usedInDishes?: { name: string; amount: string }[];
 }
 
+export const additionalShoppingProductId = (item: AdditionalShoppingItem): string =>
+  item.productId ?? `custom:${item.id}`;
+
+export function getAdditionalShoppingProduct(
+  item: AdditionalShoppingItem,
+  products: Product[],
+): Product | undefined {
+  if (item.productId) {
+    const product = products.find((entry) => entry.id === item.productId);
+    if (product) return product;
+  }
+  if (!item.name?.trim()) return undefined;
+  return {
+    id: additionalShoppingProductId(item),
+    name: item.name.trim(),
+    unit: item.unit ?? "шт",
+    category: item.category ?? "Прочие",
+    price: item.price ?? 0,
+    netWeight: null,
+    updatedAt: "",
+  };
+}
+
 export function buildShopping(
   ev: EventPlan,
   recipes: Recipe[],
   products: Product[],
+  categories: string[] = PRODUCT_CATEGORIES,
 ): ShoppingRow[] {
   const map = new Map<string, { amount: number; clientAmount: number; notes: string[]; dishes: Map<string, number> }>();
   for (const dish of ev.dishes) {
@@ -257,16 +282,17 @@ export function buildShopping(
     }
   }
   for (const item of ev.additionalShoppingItems ?? []) {
-    const product = products.find((p) => p.id === item.productId);
+    const product = getAdditionalShoppingProduct(item, products);
     if (!product) continue;
-    const entry = map.get(item.productId) ?? { amount: 0, clientAmount: 0, notes: [], dishes: new Map<string, number>() };
+    const entry = map.get(product.id) ?? { amount: 0, clientAmount: 0, notes: [], dishes: new Map<string, number>() };
     entry.amount += item.amount;
     entry.dishes.set("Дополнительная закупка", (entry.dishes.get("Дополнительная закупка") ?? 0) + item.amount);
-    map.set(item.productId, entry);
+    map.set(product.id, entry);
   }
   const out: ShoppingRow[] = [];
   for (const [pid, entry] of map) {
-    const product = products.find((p) => p.id === pid);
+    const product = products.find((p) => p.id === pid)
+      ?? (ev.additionalShoppingItems ?? []).map((item) => getAdditionalShoppingProduct(item, products)).find((item) => item?.id === pid);
     if (product) {
       const usedInDishes = Array.from(entry.dishes.entries()).map(([name, amount]) => ({
         name,
@@ -275,7 +301,7 @@ export function buildShopping(
       out.push({
         product,
         amount: entry.amount,
-        cost: ingredientCost({ productId: pid, amount: entry.amount }, products),
+        cost: ingredientCost({ productId: pid, amount: entry.amount }, [product, ...products]),
         clientAmount: entry.clientAmount,
         clientNotes: entry.notes.length > 0 ? entry.notes.join("; ") : undefined,
         usedInDishes,
@@ -283,7 +309,7 @@ export function buildShopping(
     }
   }
   return out.sort((a, b) => {
-    const catOrder = compareProductCategories(a.product.category, b.product.category);
+    const catOrder = compareProductCategories(a.product.category, b.product.category, categories);
     if (catOrder !== 0) return catOrder;
     return a.product.name.localeCompare(b.product.name, "ru");
   });
@@ -300,8 +326,10 @@ export function buildMultiShopping(
   events: EventPlan[],
   recipes: Recipe[],
   products: Product[],
+  categories: string[] = PRODUCT_CATEGORIES,
 ): MultiShoppingRow[] {
   const map = new Map<string, { amount: number; perEvent: Map<string, number> }>();
+  const additionalProducts = new Map<string, Product>();
   for (const ev of events) {
     for (const dish of ev.dishes) {
       const recipe = recipes.find((r) => r.id === dish.recipeId);
@@ -320,11 +348,14 @@ export function buildMultiShopping(
       }
     }
     for (const item of ev.additionalShoppingItems ?? []) {
-      if (!products.some((product) => product.id === item.productId)) continue;
-      let entry = map.get(item.productId);
+      const product = getAdditionalShoppingProduct(item, products);
+      if (!product) continue;
+      const productId = product.id;
+      additionalProducts.set(productId, product);
+      let entry = map.get(productId);
       if (!entry) {
         entry = { amount: 0, perEvent: new Map() };
-        map.set(item.productId, entry);
+        map.set(productId, entry);
       }
       entry.amount += item.amount;
       entry.perEvent.set(ev.id, (entry.perEvent.get(ev.id) ?? 0) + item.amount);
@@ -332,12 +363,12 @@ export function buildMultiShopping(
   }
   const out: MultiShoppingRow[] = [];
   for (const [pid, entry] of map) {
-    const product = products.find((p) => p.id === pid);
+    const product = products.find((p) => p.id === pid) ?? additionalProducts.get(pid);
     if (!product) continue;
     out.push({
       product,
       amount: entry.amount,
-      cost: ingredientCost({ productId: pid, amount: entry.amount }, products),
+      cost: ingredientCost({ productId: pid, amount: entry.amount }, [product, ...products]),
       perEvent: [...entry.perEvent.entries()].map(([eventId, amount]) => ({
         eventId,
         eventName: events.find((ev) => ev.id === eventId)?.name ?? "",
@@ -346,7 +377,7 @@ export function buildMultiShopping(
     });
   }
   return out.sort((a, b) => {
-    const catOrder = compareProductCategories(a.product.category, b.product.category);
+    const catOrder = compareProductCategories(a.product.category, b.product.category, categories);
     if (catOrder !== 0) return catOrder;
     return a.product.name.localeCompare(b.product.name, "ru");
   });
@@ -360,6 +391,7 @@ export function buildCombinedShoppingList(
   recipes: Recipe[],
   products: Product[],
   existingList?: CombinedShoppingList,
+  categories: string[] = PRODUCT_CATEGORIES,
 ): CombinedShoppingList {
   const now = todayISO();
   const items: CombinedShoppingItem[] = [];
@@ -370,6 +402,7 @@ export function buildCombinedShoppingList(
     cost: number;
     usedIn: Map<string, { eventName: string; dishes: Map<string, number> }>;
   }>();
+  const additionalProducts = new Map<string, Product>();
   
   for (const ev of events) {
     for (const dish of ev.dishes) {
@@ -407,15 +440,17 @@ export function buildCombinedShoppingList(
       }
     }
     for (const item of ev.additionalShoppingItems ?? []) {
-      const product = products.find((p) => p.id === item.productId);
+      const product = getAdditionalShoppingProduct(item, products);
       if (!product) continue;
-      let entry = productMap.get(item.productId);
+      const productId = product.id;
+      additionalProducts.set(productId, product);
+      let entry = productMap.get(productId);
       if (!entry) {
         entry = { amount: 0, cost: 0, usedIn: new Map() };
-        productMap.set(item.productId, entry);
+        productMap.set(productId, entry);
       }
       entry.amount += item.amount;
-      entry.cost += ingredientCost({ productId: item.productId, amount: item.amount }, products);
+      entry.cost += ingredientCost({ productId, amount: item.amount }, [product, ...products]);
       let eventEntry = entry.usedIn.get(ev.id);
       if (!eventEntry) {
         eventEntry = { eventName: ev.name, dishes: new Map() };
@@ -430,7 +465,7 @@ export function buildCombinedShoppingList(
   
   // Преобразуем в массив CombinedShoppingItem
   for (const [productId, data] of productMap) {
-    const product = products.find((p) => p.id === productId);
+    const product = products.find((p) => p.id === productId) ?? additionalProducts.get(productId);
     if (!product) continue;
     
     // Проверяем существующие отметки
@@ -447,6 +482,7 @@ export function buildCombinedShoppingList(
     
     items.push({
       productId,
+      ...(products.some((entry) => entry.id === productId) ? {} : { customProduct: product }),
       amount: data.amount,
       cost: data.cost,
       bought: existingItem?.bought ?? events.some((event) => event.bought?.includes(productId)),
@@ -460,11 +496,11 @@ export function buildCombinedShoppingList(
   
   // Сортируем по категориям
   items.sort((a, b) => {
-    const productA = products.find((p) => p.id === a.productId);
-    const productB = products.find((p) => p.id === b.productId);
+    const productA = products.find((p) => p.id === a.productId) ?? a.customProduct;
+    const productB = products.find((p) => p.id === b.productId) ?? b.customProduct;
     if (!productA || !productB) return 0;
     
-    const catOrder = compareProductCategories(productA.category, productB.category);
+    const catOrder = compareProductCategories(productA.category, productB.category, categories);
     if (catOrder !== 0) return catOrder;
     return productA.name.localeCompare(productB.name, "ru");
   });

@@ -161,16 +161,19 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
   const boughtCount = currentList.items.filter((i) => i.bought).length;
   const inStockCount = currentList.items.filter((i) => i.inStock).length;
   const orderedItems = sortMode === "place"
-    ? [...currentList.items].sort((a, b) =>
-        comparePurchasePlaces(a.purchasePlace, b.purchasePlace) || (state.products.find((product) => product.id === a.productId)?.name ?? "")
-          .localeCompare(state.products.find((product) => product.id === b.productId)?.name ?? "", "ru"),
-      )
+    ? [...currentList.items].sort((a, b) => {
+        const byPlace = comparePurchasePlaces(a.purchasePlace, b.purchasePlace);
+        if (byPlace !== 0) return byPlace;
+        const nameA = (state.products.find((product) => product.id === a.productId) ?? a.customProduct)?.name ?? "";
+        const nameB = (state.products.find((product) => product.id === b.productId) ?? b.customProduct)?.name ?? "";
+        return nameA.localeCompare(nameB, "ru");
+      })
     : currentList.items;
   const exportToExcel = async () => {
     try {
       const XLSX = await import("xlsx");
       const rows = orderedItems.flatMap((item) => {
-        const product = state.products.find((entry) => entry.id === item.productId);
+        const product = state.products.find((entry) => entry.id === item.productId) ?? item.customProduct;
         if (!product) return [];
         const status = item.bought ? "Куплено" : item.inStock ? "На складе" : "К закупке";
         const usedIn = item.usedIn.map((usage) =>
@@ -252,7 +255,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
           {(() => {
             const groups = new Map<string, typeof currentList.items>();
             for (const item of currentList.items) {
-              const product = state.products.find((p) => p.id === item.productId);
+              const product = state.products.find((p) => p.id === item.productId) ?? item.customProduct;
               if (!product) continue;
               const place = item.purchasePlace?.trim();
               const key = sortMode === "category" ? product.category : place ?? "";
@@ -276,7 +279,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
                   </div>
                   <div className="space-y-2">
                     {items.map((item) => {
-                      const product = state.products.find((p) => p.id === item.productId);
+                      const product = state.products.find((p) => p.id === item.productId) ?? item.customProduct;
                       if (!product) return null;
                       return (
                         <div key={item.productId} className={`flex flex-wrap items-center gap-2.5 rounded-[12px] border px-3 py-2.5 ${item.bought || item.inStock ? "border-mint/25 bg-mint/5 opacity-80" : "border-line bg-pine-800"}`}>
@@ -347,7 +350,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
             </thead>
             <tbody>
               {orderedItems.map((item) => {
-                const product = state.products.find((entry) => entry.id === item.productId);
+                const product = state.products.find((entry) => entry.id === item.productId) ?? item.customProduct;
                 if (!product) return null;
                 return (
                   <tr key={item.productId}>
@@ -392,7 +395,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
 }
 
 export function EventSheet({ open, onClose, editing }: { open: boolean; onClose: () => void; editing: EventPlan | null }) {
-  const { saveEvent } = useStore();
+  const { state, saveEvent } = useStore();
   const toast = useToast();
   const [name, setName] = useState("");
   const [type, setType] = useState<EventType>("Торжество");
@@ -400,10 +403,12 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
   const [guests, setGuests] = useState(20);
   const [guestsPerTable, setGuestsPerTable] = useState(6);
   const [tablesCount, setTablesCount] = useState(4);
+  const [sourceEventId, setSourceEventId] = useState("");
   useEffect(() => {
     if (open) {
       setName(editing?.name ?? ""); setType(editing?.type ?? "Торжество");
       setDate(editing?.date ?? todayISO()); setGuests(editing?.guests ?? 20);
+      setSourceEventId("");
       const defaultGPT = (editing?.type ?? "Торжество") === "Торжество" ? 6 : 8;
       setGuestsPerTable(editing?.guestsPerTable ?? defaultGPT);
       setTablesCount(editing?.tablesCount ?? Math.ceil((editing?.guests ?? 20) / defaultGPT));
@@ -412,7 +417,12 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
   const valid = name.trim().length > 0 && date !== "";
   const save = () => {
     if (!valid) return;
-    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes: editing?.dishes ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], purchasePlaces: editing?.purchasePlaces ?? {}, comment: editing?.comment });
+    const sourceEvent = state.events.find((event) => event.id === sourceEventId);
+    const dishes = editing?.dishes ?? sourceEvent?.dishes.map((dish) => ({
+      ...dish,
+      overrides: dish.overrides?.map((row) => ({ ...row })) ?? null,
+    })) ?? [];
+    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes, additionalShoppingItems: editing?.additionalShoppingItems ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], purchasePlaces: editing?.purchasePlaces ?? {}, comment: editing?.comment });
     toast(editing ? "Мероприятие обновлено" : "Мероприятие создано"); onClose();
   };
   return (
@@ -424,6 +434,7 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
     }>
       <div className="space-y-5">
         <Field label="Название"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Свадьба Михаила и Елены" className={inputCls} autoFocus={!editing} /></Field>
+        {!editing && <Field label="Создать на основе мероприятия"><select value={sourceEventId} onChange={(event) => setSourceEventId(event.target.value)} className={inputCls}><option value="">Без основы — пустое меню</option>{[...state.events].sort((a, b) => b.date.localeCompare(a.date)).map((event) => <option key={event.id} value={event.id}>{event.date} · {event.name}</option>)}</select><span className="mt-1 block text-[10.5px] text-sage">Будет скопировано только меню с блюдами.</span></Field>}
         <Field label="Тип мероприятия"><div className="grid grid-cols-2 gap-2">{EVENT_TYPES.map((t) => { const st = EVENT_TYPE_STYLE[t]; const active = t === type; return (<button key={t} onClick={() => { setType(t); const gpt = t === "Торжество" ? 6 : 8; setGuestsPerTable(gpt); setTablesCount(Math.ceil(guests / gpt)); }} className="tap rounded-[12px] border py-3 text-[13px] font-semibold transition-colors" style={active ? { borderColor: st.fg, background: st.bg, color: st.fg } : { borderColor: "var(--color-line)", color: "var(--color-sage)" }}>{t}</button>); })}</div></Field>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Дата"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls + " font-display text-[13px]"} /></Field><Field label="Гостей"><StepperInput value={guests} onChange={(v) => { setGuests(v); setTablesCount(Math.ceil(v / guestsPerTable)); }} min={1} placeholder="Кол-во" /></Field></div>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Гостей за столом"><Stepper value={guestsPerTable} onChange={(v) => { setGuestsPerTable(v); setTablesCount(Math.ceil(guests / v)); }} min={1} /></Field><Field label="Столов"><Stepper value={tablesCount} onChange={setTablesCount} min={1} /></Field></div>

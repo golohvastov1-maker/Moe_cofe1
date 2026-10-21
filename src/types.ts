@@ -169,8 +169,12 @@ export interface EventDish {
 
 export interface AdditionalShoppingItem {
   id: string;
-  productId: string;
+  productId?: string;
   amount: number;
+  name?: string;
+  unit?: Unit;
+  category?: ProductCategory;
+  price?: number;
 }
 
 export interface EventService {
@@ -220,6 +224,7 @@ export interface Task {
 
 export interface CombinedShoppingItem {
   productId: string;
+  customProduct?: Product;
   amount: number;
   cost: number;
   bought: boolean;
