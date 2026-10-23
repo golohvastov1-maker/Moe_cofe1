@@ -807,7 +807,7 @@ export function RecipesPricePreview({ open, onClose }: { open: boolean; onClose:
       []
     ];
     
-    [...MENU_ORDER, ...state.categories.filter((c) => !MENU_ORDER.includes(c.name)).map((c) => c.name)].forEach((cat) => {
+    orderedRecipeCategories(state.categories, state.recipes.map((recipe) => recipe.category), MENU_ORDER).forEach((cat) => {
       if (!selectedCategories.includes(cat)) return;
       const group = state.recipes.filter((r) => r.category === cat).sort((a, b) => a.name.localeCompare(b.name, "ru"));
       if (group.length === 0) return;
@@ -885,7 +885,7 @@ function RecipesPriceDoc({ selectedCategories }: { selectedCategories: string[] 
         <h1 className="font-display text-[24px] leading-tight">Прайс-лист блюд</h1>
         <p className="mt-1 text-[12.5px]" style={{ color: SOFT }}>Конечные цены с наценкой · {fmtDateLong(todayISO())}</p>
       </div>
-      {[...MENU_ORDER, ...state.categories.filter((c) => !MENU_ORDER.includes(c.name)).map((c) => c.name)].map((cat) => {
+      {orderedRecipeCategories(state.categories, state.recipes.map((recipe) => recipe.category), MENU_ORDER).map((cat) => {
         if (!selectedCategories.includes(cat)) return null;
         const group = state.recipes.filter((r) => r.category === cat && !r.hideFromPriceList).sort((a, b) => a.name.localeCompare(b.name, "ru"));
         if (group.length === 0) return null;

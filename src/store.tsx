@@ -214,9 +214,12 @@ interface StoreApi {
   importProducts: (rows: PriceRowInput[]) => { added: number; updated: number };
   saveProductCategory: (oldName: ProductCategory | null, newName: ProductCategory) => void;
   deleteProductCategory: (name: ProductCategory) => void;
+  moveProductCategory: (name: ProductCategory, direction: -1 | 1) => void;
   saveCategory: (c: CategoryInfo) => void;
   deleteCategory: (id: string) => void;
+  moveCategory: (id: string, direction: -1 | 1) => void;
   saveEventType: (previousName: string | null, eventType: EventTypeInfo) => void;
+  moveEventType: (name: string, direction: -1 | 1) => void;
   saveRecipe: (r: Recipe) => void;
   deleteRecipe: (id: string) => void;
   saveService: (s: Service) => void;
@@ -569,6 +572,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const moveProductCategory = (name: ProductCategory, direction: -1 | 1) => {
+    setState((s) => {
+      const categories = [...s.productCategories];
+      const index = categories.indexOf(name);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= categories.length) return s;
+      [categories[index], categories[target]] = [categories[target], categories[index]];
+      return { ...s, productCategories: categories };
+    });
+  };
+
   const saveCategory = (c: CategoryInfo) => {
     setState((s) => {
       const previous = s.categories.find((category) => category.id === c.id);
@@ -607,6 +621,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const moveCategory = (id: string, direction: -1 | 1) => {
+    setState((s) => {
+      const categories = [...s.categories];
+      const index = categories.findIndex((category) => category.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= categories.length) return s;
+      [categories[index], categories[target]] = [categories[target], categories[index]];
+      return { ...s, categories };
+    });
+  };
+
   const saveEventType = (previousName: string | null, eventType: EventTypeInfo) => {
     const name = eventType.name.trim();
     if (!name) return;
@@ -623,6 +648,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ? s.events.map((event) => event.type === previousName ? { ...event, type: name } : event)
           : s.events,
       };
+    });
+  };
+
+  const moveEventType = (name: string, direction: -1 | 1) => {
+    setState((s) => {
+      const eventTypes = [...s.eventTypes];
+      const index = eventTypes.findIndex((eventType) => eventType.name === name);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= eventTypes.length) return s;
+      [eventTypes[index], eventTypes[target]] = [eventTypes[target], eventTypes[index]];
+      return { ...s, eventTypes };
     });
   };
 
@@ -849,9 +885,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     importProducts,
     saveProductCategory,
     deleteProductCategory,
+    moveProductCategory,
     saveCategory,
     deleteCategory,
+    moveCategory,
     saveEventType,
+    moveEventType,
     saveRecipe,
     deleteRecipe,
     saveService,

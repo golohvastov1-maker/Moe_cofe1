@@ -400,7 +400,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
 }
 
 function EventTypesManager({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { state, saveEventType } = useStore();
+  const { state, saveEventType, moveEventType } = useStore();
   const toast = useToast();
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -448,7 +448,7 @@ function EventTypesManager({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <Modal open={open} onClose={() => { closeEditor(); onClose(); }} title="Типы мероприятий" subtitle="Тип определяет число гостей за столом, состав стоимости и вид клиентского счёта." maxW="max-w-[680px]">
       <div className="space-y-2">
-        {state.eventTypes.map((eventType) => (
+        {state.eventTypes.map((eventType, index) => (
           <div key={eventType.name} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-line bg-pine-800 px-3.5 py-3">
             <div className="min-w-0 grow">
               <p className="text-[13px] font-semibold text-cream">{eventType.name}</p>
@@ -458,6 +458,10 @@ function EventTypesManager({ open, onClose }: { open: boolean; onClose: () => vo
               <p className="text-[10.5px] text-sage">
                 Скрыть в счёте: {eventType.hiddenInvoiceDishCategories?.join(", ") || "ничего"}
               </p>
+            </div>
+            <div className="flex shrink-0">
+              <button type="button" disabled={index === 0} onClick={() => moveEventType(eventType.name, -1)} aria-label={`Переместить тип ${eventType.name} выше`} className="tap rounded-md px-1.5 py-1 text-[12px] font-semibold text-sage hover:text-saffron disabled:opacity-30">↑</button>
+              <button type="button" disabled={index === state.eventTypes.length - 1} onClick={() => moveEventType(eventType.name, 1)} aria-label={`Переместить тип ${eventType.name} ниже`} className="tap rounded-md px-1.5 py-1 text-[12px] font-semibold text-sage hover:text-saffron disabled:opacity-30">↓</button>
             </div>
             <button onClick={() => startEdit(eventType)} className="tap rounded-[9px] border border-line px-3 py-1.5 text-[11px] font-semibold text-sage hover:text-saffron">Настроить</button>
           </div>

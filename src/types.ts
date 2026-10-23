@@ -47,8 +47,8 @@ export const orderedRecipeCategories = (
 ): string[] => {
   const used = new Set(usedCategories);
   return [...new Set([
-    ...preferredOrder,
     ...configuredCategories.map((category) => category.name),
+    ...preferredOrder,
     ...usedCategories,
   ])].filter((category) => used.has(category));
 };

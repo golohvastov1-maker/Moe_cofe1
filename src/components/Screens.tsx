@@ -212,7 +212,7 @@ function ProductCategoriesManager({ open, onClose, onRename, onDelete }: {
   onRename: (oldName: string, newName: string) => void;
   onDelete: (name: string) => void;
 }) {
-  const { state, saveProductCategory, deleteProductCategory } = useStore();
+  const { state, saveProductCategory, deleteProductCategory, moveProductCategory } = useStore();
   const toast = useToast();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -255,6 +255,10 @@ function ProductCategoriesManager({ open, onClose, onRename, onDelete }: {
                   <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: productCatColor(category) }} />
                   <span className="min-w-0 grow truncate text-[12.5px] font-semibold text-cream">{category}</span>
                   <span className="text-[10px] text-sage">{count} прод.</span>
+                  <div className="flex shrink-0">
+                    <button type="button" disabled={state.productCategories.indexOf(category) === 0} onClick={() => moveProductCategory(category, -1)} aria-label={`Переместить категорию ${category} выше`} className="tap rounded-md px-1.5 py-1 text-[12px] font-semibold text-sage hover:text-saffron disabled:opacity-30">↑</button>
+                    <button type="button" disabled={state.productCategories.indexOf(category) === state.productCategories.length - 1} onClick={() => moveProductCategory(category, 1)} aria-label={`Переместить категорию ${category} ниже`} className="tap rounded-md px-1.5 py-1 text-[12px] font-semibold text-sage hover:text-saffron disabled:opacity-30">↓</button>
+                  </div>
                   <button onClick={() => startEdit(category)} className="tap rounded-md px-1.5 py-1 text-[10.5px] font-semibold text-sage hover:text-saffron">Изменить</button>
                   {state.productCategories.length > 1 && <DangerConfirm onConfirm={() => remove(category)} hint="удалить?" />}
                 </div>
@@ -376,7 +380,7 @@ export function RequisitesScreen() {
 
 // ===== CATEGORIES MANAGER =====
 export function CategoriesManager({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { state, saveCategory, deleteCategory } = useStore();
+  const { state, saveCategory, deleteCategory, moveCategory } = useStore();
   const toast = useToast();
   const [editing, setEditing] = useState<CategoryInfo | null>(null);
   const [name, setName] = useState("");
@@ -400,11 +404,15 @@ export function CategoriesManager({ open, onClose }: { open: boolean; onClose: (
             <button onClick={openNew} className="tap flex items-center gap-1.5 rounded-[10px] bg-saffron px-3 py-1.5 text-[11px] font-bold text-pine-950 hover:brightness-110"><IcPlus size={13} /> Новая</button>
           </div>
           <div className="space-y-2">
-            {state.categories.map((c) => (
+            {state.categories.map((c, index) => (
               <div key={c.id} className="flex items-center gap-3 rounded-[12px] border border-line bg-pine-800 px-3.5 py-2.5">
                 <span className="h-3 w-3 rounded-full" style={{ background: c.color }} />
                 <span className="min-w-0 grow text-[13px] font-semibold text-cream">{c.name}</span>
                 {c.isDefault && <span className="text-[10px] font-semibold text-sage">системная</span>}
+                <div className="flex shrink-0">
+                  <button type="button" disabled={index === 0} onClick={() => moveCategory(c.id, -1)} aria-label={`Переместить категорию ${c.name} выше`} className="tap rounded-md px-1.5 py-1 text-[12px] font-semibold text-sage hover:text-saffron disabled:opacity-30">↑</button>
+                  <button type="button" disabled={index === state.categories.length - 1} onClick={() => moveCategory(c.id, 1)} aria-label={`Переместить категорию ${c.name} ниже`} className="tap rounded-md px-1.5 py-1 text-[12px] font-semibold text-sage hover:text-saffron disabled:opacity-30">↓</button>
+                </div>
                 <button onClick={() => openEdit(c)} className="tap text-[11px] font-semibold text-sage hover:text-saffron">Изменить</button>
                 {!c.isDefault && <DangerConfirm onConfirm={() => del(c.id)} hint="удалить?" />}
               </div>
