@@ -1,4 +1,4 @@
-import { PRODUCT_CATEGORIES, type AppState } from "./types";
+import { DEFAULT_EVENT_TYPES, PRODUCT_CATEGORIES, type AppState } from "./types";
 import { addDaysISO } from "./utils";
 
 const d = addDaysISO;
@@ -13,6 +13,7 @@ export const seedState: AppState = {
     { id: "dessert", name: "Десерты", color: "#eb9cc3", isDefault: true },
     { id: "memorial", name: "Поминки", color: "#aebfd2", isDefault: true },
   ],
+  eventTypes: DEFAULT_EVENT_TYPES.map((eventType) => ({ ...eventType, excludedDishCategories: [...eventType.excludedDishCategories] })),
   products: [
     { id: "p01", name: "Свиная шея", unit: "кг", category: "Мясо", price: 489, netWeight: null, updatedAt: d(-4) },
     { id: "p02", name: "Куриное филе", unit: "кг", category: "Мясо", price: 389, netWeight: null, updatedAt: d(-4) },

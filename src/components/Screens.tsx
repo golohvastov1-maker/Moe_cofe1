@@ -393,7 +393,7 @@ export function CategoriesManager({ open, onClose }: { open: boolean; onClose: (
   const del = (id: string) => { deleteCategory(id); toast("Категория удалена", "del"); };
   return (
     <>
-      <Modal open={open} onClose={onClose} title="Управление категориями" subtitle="Создавайте и редактируйте категории рецептов" maxW="max-w-[600px]">
+      <Modal open={open} onClose={onClose} title="Категории блюд" subtitle="Создавайте, редактируйте и удаляйте категории, доступные в рецептах" maxW="max-w-[600px]">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-[13px] font-semibold text-cream">Категории</h3>

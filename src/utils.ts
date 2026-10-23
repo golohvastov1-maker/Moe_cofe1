@@ -1,6 +1,7 @@
 import type {
   EventPlan,
   EventService,
+  EventTypeInfo,
   AdditionalShoppingItem,
   IngredientRow,
   Product,
@@ -8,7 +9,7 @@ import type {
   Recipe,
   Unit,
 } from "./types";
-import { PRODUCT_CATEGORIES, compareProductCategories, isWeighed } from "./types";
+import { DEFAULT_EVENT_TYPES, PRODUCT_CATEGORIES, compareProductCategories, isWeighed } from "./types";
 
 export const uid = () =>
   Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
@@ -118,6 +119,21 @@ export const pieceAmountLabel = (product: Product, amount: number): string => {
   return base;
 };
 
+export const shoppingPieceAmountLabel = (
+  product: Product,
+  amount: number,
+  requiredAmount = amount,
+): string => {
+  const base = `${fmtNum(ceilPurchaseAmount(amount))} ${product.unit}`;
+  if (product.netWeight && product.netWeight > 0) {
+    const requiredWeight = requiredAmount * product.netWeight;
+    return `${base} · ${requiredWeight >= 1000 ? `${fmtNum(requiredWeight / 1000)} кг` : `${fmtNum(requiredWeight)} г`}`;
+  }
+  return base;
+};
+
+export const ceilPurchaseAmount = (amount: number): number => Math.ceil(amount - 1e-9);
+
 export const recipeCost = (r: Recipe, products: Product[]): number =>
   r.ingredients.reduce((s, i) => s + ingredientCost(i, products), 0);
 
@@ -158,6 +174,8 @@ export interface DishSummary {
   costPerPortion: number;
   clientPerPortion: number;
   perPortion: number;
+  includedInEventTotal: boolean;
+  showInClientInvoice: boolean;
 }
 
 export interface EventSummary {
@@ -168,14 +186,26 @@ export interface EventSummary {
   foodRevenue: number;
   eventDiscountSum: number;
   foodAfterDiscount: number;
+  excludedDishesTotal: number;
   services: number;
   grand: number;
   portions: number;
   perGuest: number;
 }
 
-export function eventSummary(ev: EventPlan, recipes: Recipe[], products: Product[]): EventSummary {
+export function eventSummary(
+  ev: EventPlan,
+  recipes: Recipe[],
+  products: Product[],
+  eventTypes: EventTypeInfo[] = DEFAULT_EVENT_TYPES,
+): EventSummary {
   const dishes: DishSummary[] = [];
+  const excludedCategories = new Set(
+    eventTypes.find((eventType) => eventType.name === ev.type)?.excludedDishCategories ?? [],
+  );
+  const hiddenInvoiceCategories = new Set(
+    eventTypes.find((eventType) => eventType.name === ev.type)?.hiddenInvoiceDishCategories ?? [],
+  );
   for (const dish of ev.dishes) {
     const recipe = recipes.find((r) => r.id === dish.recipeId);
     if (!recipe) continue;
@@ -193,14 +223,20 @@ export function eventSummary(ev: EventPlan, recipes: Recipe[], products: Product
       costPerPortion: cost,
       clientPerPortion,
       perPortion: cost,
+      includedInEventTotal: !excludedCategories.has(recipe.category),
+      showInClientInvoice: !hiddenInvoiceCategories.has(recipe.category),
     });
   }
   const foodCost = dishes.reduce((s, d) => s + d.costPerPortion * d.dish.portions, 0);
-  const foodListTotal = dishes.reduce(
+  const includedDishes = dishes.filter((dish) => dish.includedInEventTotal);
+  const foodListTotal = includedDishes.reduce(
     (s, d) => s + recipeFinalPerPortion(d.recipe, products) * d.dish.portions,
     0,
   );
-  const foodRevenue = dishes.reduce((s, d) => s + d.clientPerPortion * d.dish.portions, 0);
+  const foodRevenue = includedDishes.reduce((s, d) => s + d.clientPerPortion * d.dish.portions, 0);
+  const excludedDishesTotal = dishes
+    .filter((dish) => !dish.includedInEventTotal)
+    .reduce((s, d) => s + d.clientPerPortion * d.dish.portions, 0);
   const eventDiscountSum = (foodRevenue * (ev.discount ?? 0)) / 100;
   const foodAfterDiscount = foodRevenue - eventDiscountSum;
   const services = servicesTotal(ev.services);
@@ -214,6 +250,7 @@ export function eventSummary(ev: EventPlan, recipes: Recipe[], products: Product
     foodRevenue,
     eventDiscountSum,
     foodAfterDiscount,
+    excludedDishesTotal,
     services,
     grand,
     portions,
@@ -224,6 +261,7 @@ export function eventSummary(ev: EventPlan, recipes: Recipe[], products: Product
 export interface ShoppingRow {
   product: Product;
   amount: number;
+  requiredAmount: number;
   cost: number;
   clientAmount?: number;
   clientNotes?: string;
@@ -300,8 +338,9 @@ export function buildShopping(
       }));
       out.push({
         product,
-        amount: entry.amount,
-        cost: ingredientCost({ productId: pid, amount: entry.amount }, [product, ...products]),
+        amount: isWeighed(product.unit) ? entry.amount : ceilPurchaseAmount(entry.amount),
+        requiredAmount: entry.amount,
+        cost: ingredientCost({ productId: pid, amount: isWeighed(product.unit) ? entry.amount : ceilPurchaseAmount(entry.amount) }, [product, ...products]),
         clientAmount: entry.clientAmount,
         clientNotes: entry.notes.length > 0 ? entry.notes.join("; ") : undefined,
         usedInDishes,
@@ -318,6 +357,7 @@ export function buildShopping(
 export interface MultiShoppingRow {
   product: Product;
   amount: number;
+  requiredAmount: number;
   cost: number;
   perEvent: { eventId: string; eventName: string; amount: number }[];
 }
@@ -367,8 +407,9 @@ export function buildMultiShopping(
     if (!product) continue;
     out.push({
       product,
-      amount: entry.amount,
-      cost: ingredientCost({ productId: pid, amount: entry.amount }, [product, ...products]),
+      amount: isWeighed(product.unit) ? entry.amount : ceilPurchaseAmount(entry.amount),
+      requiredAmount: entry.amount,
+      cost: ingredientCost({ productId: pid, amount: isWeighed(product.unit) ? entry.amount : ceilPurchaseAmount(entry.amount) }, [product, ...products]),
       perEvent: [...entry.perEvent.entries()].map(([eventId, amount]) => ({
         eventId,
         eventName: events.find((ev) => ev.id === eventId)?.name ?? "",
@@ -483,8 +524,9 @@ export function buildCombinedShoppingList(
     items.push({
       productId,
       ...(products.some((entry) => entry.id === productId) ? {} : { customProduct: product }),
-      amount: data.amount,
-      cost: data.cost,
+      amount: isWeighed(product.unit) ? data.amount : ceilPurchaseAmount(data.amount),
+      requiredAmount: data.amount,
+      cost: ingredientCost({ productId, amount: isWeighed(product.unit) ? data.amount : ceilPurchaseAmount(data.amount) }, [product, ...products]),
       bought: existingItem?.bought ?? events.some((event) => event.bought?.includes(productId)),
       inStock: existingItem?.inStock ?? events.some((event) => event.inStock?.includes(productId)),
       purchasePlace: existingItem?.purchasePlace ?? [...new Set(

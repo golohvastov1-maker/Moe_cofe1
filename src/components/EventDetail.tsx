@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Category, DocKind, EventPlan, IngredientRow, ProductCategory, Unit } from "../types";
-import { EVENT_TYPE_STYLE, MENU_ORDER, UNITS, amountUnitLabel, catStyle, compareProductCategories, isPieceUnit, isWeighed } from "../types";
+import { MENU_ORDER, UNITS, amountUnitLabel, catStyle, compareProductCategories, eventTypeStyle, isPieceUnit, isWeighed, orderedRecipeCategories } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildShopping, comparePurchasePlaces, eventSummary, fmtDateShort, fmtMoney, fmtNum, getAdditionalShoppingProduct, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, todayISO, uid } from "../utils";
+import { amountLabel, buildShopping, comparePurchasePlaces, eventSummary, fmtDateShort, fmtMoney, getAdditionalShoppingProduct, ingredientCost, parseNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipePerPortion, round2, servicesTotal, shoppingPieceAmountLabel, todayISO, uid } from "../utils";
 import { AmountEditor, DangerConfirm, Field, Modal, Segmented, ServingBadge, Stepper, StepperInput, inputCls, selectCls, textareaCls, useCountUp, useToast } from "./UI";
 import { IcBook, IcBriefcase, IcCart, IcChevronLeft, IcComment, IcDoc, IcPencil, IcPlus, IcReset, IcRuble, IcSearch, IcUsers, IcX } from "./Icons";
 import { EventDocPreview } from "./PrintDocs";
@@ -26,11 +26,12 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
   const [docKind, setDocKind] = useState<DocKind | null>(null);
   const [docSortMode, setDocSortMode] = useState<"category" | "place">("category");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [replaceDishId, setReplaceDishId] = useState<string | null>(null);
   const [editDishId, setEditDishId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<"name" | "price" | "portions">("name");
-  const sum = eventSummary(ev, state.recipes, state.products);
+  const [sortBy, setSortBy] = useState<"added" | "name" | "price">("added");
+  const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
   const animGrand = useCountUp(sum.grand, 600);
-  const typeSt = EVENT_TYPE_STYLE[ev.type];
+  const typeSt = eventTypeStyle(ev.type);
   const update = (patch: Partial<EventPlan>) => saveEvent({ ...ev, ...patch });
   const TABS: { id: TabId; label: string; short: string; Icon: typeof IcBook }[] = [
     { id: "menu", label: `Меню · ${ev.dishes.length}`, short: `Меню · ${ev.dishes.length}`, Icon: IcBook },
@@ -65,14 +66,24 @@ function DetailInner({ ev, onBack }: { ev: EventPlan; onBack: () => void }) {
         {TABS.map((t) => { const active = tab === t.id; return (<button key={t.id} onClick={() => setTab(t.id)} className={`tap relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 py-2 text-[12.5px] font-semibold transition-colors ${active ? "bg-pine-700 text-saffron" : "text-sage hover:text-cream"}`}><t.Icon size={15} /><span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.label}</span></button>); })}
       </div>
       <div className="mt-5">
-        {tab === "menu" && <MenuTab ev={ev} onAdd={() => setPickerOpen(true)} onEditDish={setEditDishId} sortBy={sortBy} setSortBy={setSortBy} />}
+        {tab === "menu" && <MenuTab ev={ev} onAdd={() => { setReplaceDishId(null); setPickerOpen(true); }} onReplace={(recipeId) => { setReplaceDishId(recipeId); setPickerOpen(true); }} onEditDish={setEditDishId} sortBy={sortBy} setSortBy={setSortBy} />}
         {tab === "client" && <ClientItemsTab ev={ev} />}
         {tab === "services" && <ServicesTab ev={ev} />}
         {tab === "docs" && <DocsTab ev={ev} onOpenDoc={(kind, mode) => { setDocSortMode(mode); setDocKind(kind); }} />}
         {tab === "comment" && <CommentTab ev={ev} />}
       </div>
       <EventSheet open={editOpen} onClose={() => setEditOpen(false)} editing={ev} />
-      <AddDishPicker open={pickerOpen} onClose={() => setPickerOpen(false)} ev={ev} onAdd={(recipeId) => { saveEvent({ ...ev, dishes: [...ev.dishes, { recipeId, portions: Math.max(1, ev.guests), overrides: null, discount: 0 }] }); setPickerOpen(false); toast("Блюдо добавлено в меню"); }} />
+      <AddDishPicker open={pickerOpen} onClose={() => { setPickerOpen(false); setReplaceDishId(null); }} ev={ev} replacingRecipeId={replaceDishId} onAdd={(recipeId) => {
+        if (replaceDishId) {
+          saveEvent({ ...ev, dishes: ev.dishes.map((dish) => dish.recipeId === replaceDishId ? { ...dish, recipeId, overrides: null } : dish) });
+          toast("Блюдо заменено");
+        } else {
+          saveEvent({ ...ev, dishes: [...ev.dishes, { recipeId, portions: Math.max(1, ev.guests), overrides: null, discount: 0 }] });
+          toast("Блюдо добавлено в меню");
+        }
+        setPickerOpen(false);
+        setReplaceDishId(null);
+      }} />
       <IngredientEditor key={editDishId ?? "none"} ev={ev} recipeId={editDishId} onClose={() => setEditDishId(null)} />
       {docKind && <EventDocPreview kind={docKind} event={ev} sortMode={docSortMode} onClose={() => setDocKind(null)} />}
     </section>
@@ -141,18 +152,23 @@ function CommentTab({ ev }: { ev: EventPlan }) {
   );
 }
 
-function MenuTab({ ev, onAdd, onEditDish, sortBy, setSortBy }: { ev: EventPlan; onAdd: () => void; onEditDish: (recipeId: string) => void; sortBy: "name" | "price" | "portions"; setSortBy: (s: "name" | "price" | "portions") => void }) {
+function MenuTab({ ev, onAdd, onReplace, onEditDish, sortBy, setSortBy }: { ev: EventPlan; onAdd: () => void; onReplace: (recipeId: string) => void; onEditDish: (recipeId: string) => void; sortBy: "added" | "name" | "price"; setSortBy: (s: "added" | "name" | "price") => void }) {
   const { state, saveEvent } = useStore();
   const toast = useToast();
-  const sum = eventSummary(ev, state.recipes, state.products);
+  const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
   const byCat = useMemo(() => {
     const m = new Map<Category, typeof sum.dishes>();
+    if (sortBy === "added") {
+      m.set("Порядок добавления", [...sum.dishes]);
+      return m;
+    }
     for (const d of sum.dishes) { const c = d.recipe.category; const arr = m.get(c); if (arr) arr.push(d); else m.set(c, [d]); }
     for (const [cat, dishes] of m.entries()) {
       const sorted = [...dishes].sort((a, b) => {
         if (sortBy === "name") return a.recipe.name.localeCompare(b.recipe.name, "ru");
-        else if (sortBy === "price") { const priceA = recipeFinalPerPortion(a.recipe, state.products); const priceB = recipeFinalPerPortion(b.recipe, state.products); return priceB - priceA; }
-        else return b.dish.portions - a.dish.portions;
+        const priceA = recipeFinalPerPortion(a.recipe, state.products);
+        const priceB = recipeFinalPerPortion(b.recipe, state.products);
+        return priceB - priceA;
       });
       m.set(cat, sorted);
     }
@@ -163,13 +179,13 @@ function MenuTab({ ev, onAdd, onEditDish, sortBy, setSortBy }: { ev: EventPlan; 
   return (
     <div>
       {ev.dishes.length === 0 && <p className="reveal rounded-[14px] border border-dashed border-pine-500/70 px-4 py-6 text-center text-[12.5px] text-sage">Меню пустое — добавьте блюда, и смета соберётся автоматически</p>}
-      {ev.dishes.length > 0 && <div className="reveal mb-4 flex items-center gap-2"><span className="text-[11px] font-bold uppercase tracking-[0.08em] text-sage">Сортировка:</span><Segmented options={[{ value: "name", label: "По названию" }, { value: "price", label: "По цене" }, { value: "portions", label: "По порциям" }]} value={sortBy} onChange={setSortBy} /></div>}
+      {ev.dishes.length > 0 && <div className="reveal mb-4 flex items-center gap-2"><span className="text-[11px] font-bold uppercase tracking-[0.08em] text-sage">Сортировка:</span><Segmented options={[{ value: "added", label: "По порядку добавления" }, { value: "name", label: "По названию" }, { value: "price", label: "По цене" }]} value={sortBy} onChange={setSortBy} /></div>}
       <div className="space-y-6">
-        {MENU_ORDER.map((cat) => {
+        {orderedRecipeCategories(state.categories, [...byCat.keys()], MENU_ORDER).map((cat) => {
           const dishes = byCat.get(cat);
           if (!dishes || dishes.length === 0) return null;
           const st = catStyle(cat);
-          const catTotal = dishes.reduce((s, d) => s + d.clientPerPortion * d.dish.portions, 0);
+          const catTotal = dishes.reduce((s, d) => s + (d.includedInEventTotal ? d.clientPerPortion * d.dish.portions : 0), 0);
           return (
             <div key={cat} className="reveal">
               <div className="mb-2.5 flex items-center gap-2.5"><span className="h-2 w-2 rounded-full" style={{ background: st.fg }} /><h2 className="font-display text-[14px] font-bold" style={{ color: st.fg }}>{cat}</h2><span className="text-[11px] font-semibold text-sage">{dishes.length} {dishes.length === 1 ? "блюдо" : dishes.length < 5 ? "блюда" : "блюд"}</span><span className="h-px grow bg-line" /><span className="hidden text-[11px] text-sage sm:inline">{fmtMoney(catTotal)}</span></div>
@@ -182,10 +198,12 @@ function MenuTab({ ev, onAdd, onEditDish, sortBy, setSortBy }: { ev: EventPlan; 
                     <div key={d.recipe.id} className="reveal rounded-[14px] border border-line bg-pine-800 p-3.5" style={{ animationDelay: `${Math.min(i * 40, 300)}ms` }}>
                       <div className="flex items-center gap-2">
                         <div className="min-w-0 grow">
-                          <div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{d.recipe.name}</p><ServingBadge serving={d.recipe.serving} />{d.overridden && <span className="shrink-0 rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">состав изменён</span>}{d.dish.comment && <span className="shrink-0 rounded-full border border-saffron/30 bg-saffron/10 px-2 py-0.5 text-[9px] font-bold uppercase text-saffron">есть комментарий</span>}</div>
+                          <div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{d.recipe.name}</p>{sortBy === "added" && <span className="rounded-full border border-line px-2 py-0.5 text-[9px] font-semibold text-sage">{d.recipe.category}</span>}<ServingBadge serving={d.recipe.serving} />{d.overridden && <span className="shrink-0 rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">состав изменён</span>}{d.dish.comment && <span className="shrink-0 rounded-full border border-saffron/30 bg-saffron/10 px-2 py-0.5 text-[9px] font-bold uppercase text-saffron">есть комментарий</span>}</div>
                           <p className="mt-0.5 text-[11px] text-sage">{fmtMoney(basePer)} с чел-ка · выход {d.recipe.servingWeight} г{disc > 0 && <span className="text-coral"> · скидка −{disc}%</span>}</p>
+                          {!d.includedInEventTotal && <p className="mt-0.5 text-[10px] font-semibold text-sage">Не учитывается в стоимости мероприятия</p>}
                           {d.dish.comment && <p className="mt-1 truncate text-[10.5px] text-saffron/80">* {d.dish.comment}</p>}
                         </div>
+                        <button onClick={() => onReplace(d.recipe.id)} className="tap shrink-0 rounded-[10px] border border-line px-2.5 py-1.5 text-[11px] font-semibold text-sage hover:border-saffron/40 hover:text-saffron">Заменить</button>
                         <button onClick={() => onEditDish(d.recipe.id)} className="tap shrink-0 rounded-[10px] border border-line px-2.5 py-1.5 text-[11px] font-semibold text-sage hover:border-glacier/40 hover:text-glacier">Состав</button>
                         <button onClick={() => removeDish(d.recipe.id)} aria-label="Убрать блюдо" className="tap grid h-7 w-7 shrink-0 place-items-center rounded-full text-sage hover:text-coral"><IcX size={14} /></button>
                       </div>
@@ -207,17 +225,17 @@ function MenuTab({ ev, onAdd, onEditDish, sortBy, setSortBy }: { ev: EventPlan; 
   );
 }
 
-function AddDishPicker({ open, onClose, ev, onAdd }: { open: boolean; onClose: () => void; ev: EventPlan; onAdd: (recipeId: string) => void }) {
+function AddDishPicker({ open, onClose, ev, replacingRecipeId, onAdd }: { open: boolean; onClose: () => void; ev: EventPlan; replacingRecipeId: string | null; onAdd: (recipeId: string) => void }) {
   const { state } = useStore();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<Category | "все">("все");
   const list = state.recipes.filter((r) => (cat === "все" || r.category === cat) && r.name.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, "ru"));
   return (
-    <Modal open={open} onClose={onClose} title="Добавить блюдо" subtitle={`Порции по умолчанию — по числу гостей (${ev.guests})`}>
+    <Modal open={open} onClose={onClose} title={replacingRecipeId ? "Заменить блюдо" : "Добавить блюдо"} subtitle={`Порции по умолчанию — по числу гостей (${ev.guests})`}>
       <div className="relative"><IcSearch size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sage" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по рецептам…" className={inputCls + " pl-10"} autoFocus /></div>
       <div className="no-scrollbar mt-3 flex gap-1.5 overflow-x-auto pb-1">{(["все", ...state.categories.map(c => c.name)] as const).map((c) => (<button key={c} onClick={() => setCat(c)} className={`tap shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${cat === c ? "border-saffron/60 bg-saffron/15 text-saffron" : "border-line bg-pine-800 text-sage hover:text-cream"}`}>{c === "все" ? "Все категории" : c}</button>))}</div>
       <div className="mt-3 space-y-2 pb-2">
-        {list.map((r) => { const st = catStyle(r.category); const added = ev.dishes.some((d) => d.recipeId === r.id); return (<button key={r.id} disabled={added} onClick={() => onAdd(r.id)} className={`tap flex w-full items-center gap-3 rounded-[12px] border px-3.5 py-3 text-left transition-colors ${added ? "border-mint/25 bg-mint/6 opacity-60" : "border-line bg-pine-800 hover:border-saffron/40"}`}><span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]" style={{ background: st.bg, color: st.fg }}><IcBook size={17} /></span><span className="min-w-0 grow"><span className="block truncate text-[13.5px] font-semibold text-cream">{r.name}</span><span className="text-[11px] text-sage">{r.category} · рассчитано на {r.portions} чел-к</span></span><span className="shrink-0 text-right"><span className="block font-display text-[13px] font-bold text-mint">{fmtMoney(recipeFinalPerPortion(r, state.products))}</span><span className="text-[10px] text-sage">с чел-ка</span></span>{added ? (<span className="shrink-0 text-[11px] font-bold text-mint">в меню</span>) : (<IcPlus size={16} className="shrink-0 text-saffron" />)}</button>); })}
+        {list.map((r) => { const st = catStyle(r.category); const added = ev.dishes.some((d) => d.recipeId === r.id && d.recipeId !== replacingRecipeId); return (<button key={r.id} disabled={added} onClick={() => onAdd(r.id)} className={`tap flex w-full items-center gap-3 rounded-[12px] border px-3.5 py-3 text-left transition-colors ${added ? "border-mint/25 bg-mint/6 opacity-60" : "border-line bg-pine-800 hover:border-saffron/40"}`}><span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]" style={{ background: st.bg, color: st.fg }}><IcBook size={17} /></span><span className="min-w-0 grow"><span className="block truncate text-[13.5px] font-semibold text-cream">{r.name}</span><span className="text-[11px] text-sage">{r.category} · рассчитано на {r.portions} чел-к</span></span><span className="shrink-0 text-right"><span className="block font-display text-[13px] font-bold text-mint">{fmtMoney(recipeFinalPerPortion(r, state.products))}</span><span className="text-[10px] text-sage">с чел-ка</span></span>{added ? (<span className="shrink-0 text-[11px] font-bold text-mint">в меню</span>) : (<IcPlus size={16} className="shrink-0 text-saffron" />)}</button>); })}
         {list.length === 0 && <p className="py-6 text-center text-[13px] text-sage">Ничего не нашлось</p>}
       </div>
     </Modal>
@@ -375,7 +393,7 @@ function ClientItemModal({ open, onClose, item, onSave }: { open: boolean; onClo
 function ServicesTab({ ev }: { ev: EventPlan }) {
   const { state, saveEvent } = useStore();
   const toast = useToast();
-  const sum = eventSummary(ev, state.recipes, state.products);
+  const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
   const [customOpen, setCustomOpen] = useState(false);
   const discount = ev.discount ?? 0;
   const fillStyle = { "--fill": `${(discount / 100) * 100}%` } as CSSProperties;
@@ -387,11 +405,12 @@ function ServicesTab({ ev }: { ev: EventPlan }) {
       <div className="reveal rounded-[16px] border border-line bg-pine-800 p-4">
         <div className="flex items-center justify-between"><p className="text-[12px] font-bold uppercase tracking-[0.08em] text-sage">Общая скидка на блюда</p><p className="font-display text-[16px] font-bold text-coral">{discount}%</p></div>
         <input type="range" min={0} max={100} step={5} value={discount} onChange={(e) => saveEvent({ ...ev, discount: Number(e.target.value) })} style={fillStyle} className="mt-3 w-full" />
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[11.5px] sm:grid-cols-4">
+        <div className={`mt-3 grid grid-cols-2 gap-2 text-[11.5px] ${sum.excludedDishesTotal > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
           <div className="rounded-[10px] bg-pine-850 px-2.5 py-2"><p className="text-sage">По прайсу</p><p className="font-display font-bold text-cream">{fmtMoney(sum.foodListTotal)}</p></div>
           <div className="rounded-[10px] bg-pine-850 px-2.5 py-2"><p className="text-sage">Скидки блюд</p><p className="font-display font-bold text-coral">−{fmtMoney(sum.dishDiscountSum)}</p></div>
           <div className="rounded-[10px] bg-pine-850 px-2.5 py-2"><p className="text-sage">Общая скидка</p><p className="font-display font-bold text-coral">−{fmtMoney(sum.eventDiscountSum)}</p></div>
           <div className="rounded-[10px] bg-pine-850 px-2.5 py-2"><p className="text-sage">Блюда к оплате</p><p className="font-display font-bold text-mint">{fmtMoney(sum.foodAfterDiscount)}</p></div>
+          {sum.excludedDishesTotal > 0 && <div className="rounded-[10px] border border-line bg-pine-850 px-2.5 py-2"><p className="text-sage">Блюда вне сметы</p><p className="font-display font-bold text-cream">{fmtMoney(sum.excludedDishesTotal)}</p></div>}
         </div>
       </div>
       <div className="reveal">
@@ -598,12 +617,11 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
                         const isBought = bought.has(r.product.id);
                         const isStock = inStock.has(r.product.id);
                         const hasClientItems = (r.clientAmount ?? 0) > 0;
-                        const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
                         return (
                           <div key={r.product.id} className={`reveal flex flex-wrap items-center gap-2.5 rounded-[13px] border px-3.5 py-2.5 transition-all ${isBought || isStock ? "border-mint/25 bg-mint/5 opacity-80" : "border-line bg-pine-800"}`}>
                             <div className="min-w-0 grow">
                               <p className={`truncate text-[13px] font-semibold text-cream ${isBought || isStock ? "text-sage" : ""}`}>{r.product.name}</p>
-                              <p className="text-[10.5px] text-sage">{isPieceUnit(r.product.unit) ? pieceAmountLabel(r.product, r.amount) : amountLabel(r.amount, r.product.unit)}{totalWeight !== null && <span className="ml-1">· общий вес {totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`}</span>} · {fmtMoney(r.cost)}</p>
+                              <p className="text-[10.5px] text-sage">{isPieceUnit(r.product.unit) ? shoppingPieceAmountLabel(r.product, r.amount, r.requiredAmount) : amountLabel(r.amount, r.product.unit)} · {fmtMoney(r.cost)}</p>
                               {hasClientItems && <p className="mt-1 text-[10px] text-glacier"><span className="font-semibold">Клиент:</span> {isPieceUnit(r.product.unit) ? pieceAmountLabel(r.product, r.clientAmount!) : amountLabel(r.clientAmount!, r.product.unit)}{r.clientNotes && <span className="ml-1 text-sage">· {r.clientNotes}</span>}</p>}
                               {r.usedInDishes && r.usedInDishes.length > 0 && <p className="mt-1 text-[10px] text-sage"><span className="font-semibold">В блюдах:</span> {r.usedInDishes.map((d) => `${d.name} — ${d.amount}`).join(", ")}</p>}
                             </div>

@@ -4,6 +4,7 @@ import type {
   AppState,
   CategoryInfo,
   EventPlan,
+  EventTypeInfo,
   PriceLogEntry,
   Product,
   Recipe,
@@ -12,11 +13,11 @@ import type {
   Task,
   ProductCategory,
 } from "./types";
-import { PRODUCT_CATEGORIES } from "./types";
+import { DEFAULT_EVENT_TYPES, PRODUCT_CATEGORIES, isWeighed } from "./types";
 import { seedState } from "./data";
 import { getRemoteSyncEnabled, loadRemoteSnapshot, saveRemoteSnapshot } from "./sync";
 import type { PriceRowInput } from "./utils";
-import { round2, todayISO, uid } from "./utils";
+import { ceilPurchaseAmount, ingredientCost, round2, todayISO, uid } from "./utils";
 
 const KEY = "moe-cafe-v8";
 const LEGACY_KEY = "moe-cafe-v7";
@@ -50,10 +51,23 @@ function normalize(raw: Partial<AppState>): AppState {
     ...(Array.isArray(raw.productCategories) ? raw.productCategories : PRODUCT_CATEGORIES),
     ...products.map((product) => product.category),
   ])];
+  const eventTypes = Array.isArray(raw.eventTypes)
+    ? raw.eventTypes.map((eventType) => ({
+        ...eventType,
+        defaultGuestsPerTable: Math.max(1, eventType.defaultGuestsPerTable || 1),
+        excludedDishCategories: Array.isArray(eventType.excludedDishCategories) ? eventType.excludedDishCategories : [],
+        hiddenInvoiceDishCategories: Array.isArray(eventType.hiddenInvoiceDishCategories) ? eventType.hiddenInvoiceDishCategories : [],
+      }))
+    : DEFAULT_EVENT_TYPES.map((eventType) => ({
+        ...eventType,
+        excludedDishCategories: [...eventType.excludedDishCategories],
+        hiddenInvoiceDishCategories: [],
+      }));
   return {
     products,
     productCategories,
     categories: Array.isArray(raw.categories) ? raw.categories : base.categories,
+    eventTypes,
     recipes: Array.isArray(raw.recipes)
       ? raw.recipes.map((r) => ({
           ...r,
@@ -68,7 +82,8 @@ function normalize(raw: Partial<AppState>): AppState {
     services: Array.isArray(raw.services) ? raw.services : base.services,
     events: Array.isArray(raw.events)
       ? raw.events.map((e) => {
-          const defaultGuestsPerTable = e.type === "Торжество" ? 6 : 8;
+        const defaultGuestsPerTable = eventTypes.find((eventType) => eventType.name === e.type)?.defaultGuestsPerTable
+          ?? (e.type === "Торжество" ? 6 : 8);
           return {
             ...e,
             discount: e.discount ?? 0,
@@ -85,9 +100,105 @@ function normalize(raw: Partial<AppState>): AppState {
         })
       : base.events,
     tasks: Array.isArray(raw.tasks) ? raw.tasks : base.tasks,
-    combinedShoppingLists: Array.isArray(raw.combinedShoppingLists) ? raw.combinedShoppingLists : [],
+    combinedShoppingLists: Array.isArray(raw.combinedShoppingLists)
+      ? raw.combinedShoppingLists.map((list) => ({
+          ...list,
+          items: (Array.isArray(list.items) ? list.items : []).map((item) => {
+            const product = products.find((entry) => entry.id === item.productId) ?? item.customProduct;
+            const requiredAmount = item.requiredAmount ?? item.amount;
+            if (!product || isWeighed(product.unit)) return { ...item, requiredAmount };
+            const amount = ceilPurchaseAmount(item.amount);
+            return {
+              ...item,
+              amount,
+              requiredAmount,
+              cost: ingredientCost({ productId: item.productId, amount }, [product, ...products]),
+            };
+          }),
+        }))
+      : [],
     requisites: { ...base.requisites, ...(raw.requisites ?? {}) },
   };
+}
+
+function snapshotsEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function mergeArrayItemKey(value: unknown): string | null {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? null;
+  const record = value as Record<string, unknown>;
+  for (const field of ["id", "productId", "recipeId", "eventId", "recipeName", "name"]) {
+    const key = record[field];
+    if (typeof key === "string" || typeof key === "number") return `${field}:${key}`;
+  }
+  return null;
+}
+
+// Merge independent edits; when both sides changed the same value, prefer local.
+function mergeConcurrentValue(base: unknown, local: unknown, remote: unknown): unknown {
+  if (snapshotsEqual(local, base)) return remote;
+  if (snapshotsEqual(remote, base)) return local;
+  if (snapshotsEqual(local, remote)) return local;
+
+  if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote)) {
+    const entries = new Map<string, { base?: unknown; local?: unknown; remote?: unknown }>();
+    const addEntries = (values: unknown[], source: "base" | "local" | "remote") => {
+      values.forEach((value) => {
+        const key = mergeArrayItemKey(value);
+        if (key === null) throw new Error("Не удалось объединить запись без идентификатора.");
+        const entry = entries.get(key) ?? {};
+        if (entry[source] !== undefined) {
+          throw new Error(`Не удалось объединить повторяющийся идентификатор "${key}".`);
+        }
+        entry[source] = value;
+        entries.set(key, entry);
+      });
+    };
+    addEntries(base, "base");
+    addEntries(local, "local");
+    addEntries(remote, "remote");
+
+    const orderedKeys = [
+      ...remote.map(mergeArrayItemKey),
+      ...local.map(mergeArrayItemKey),
+      ...base.map(mergeArrayItemKey),
+    ].filter((key): key is string => key !== null);
+    const merged: unknown[] = [];
+    for (const key of new Set(orderedKeys)) {
+      const entry = entries.get(key);
+      if (!entry) continue;
+      const value = mergeConcurrentValue(entry.base, entry.local, entry.remote);
+      if (value !== undefined) merged.push(value);
+    }
+    return merged;
+  }
+
+  if (
+    base !== null && typeof base === "object" && !Array.isArray(base) &&
+    local !== null && typeof local === "object" && !Array.isArray(local) &&
+    remote !== null && typeof remote === "object" && !Array.isArray(remote)
+  ) {
+    const baseRecord = base as Record<string, unknown>;
+    const localRecord = local as Record<string, unknown>;
+    const remoteRecord = remote as Record<string, unknown>;
+    const merged: Record<string, unknown> = {};
+    for (const key of new Set([
+      ...Object.keys(baseRecord),
+      ...Object.keys(localRecord),
+      ...Object.keys(remoteRecord),
+    ])) {
+      const value = mergeConcurrentValue(baseRecord[key], localRecord[key], remoteRecord[key]);
+      if (value !== undefined) merged[key] = value;
+    }
+    return merged;
+  }
+
+  return local;
+}
+
+function mergeConcurrentState(base: AppState, local: AppState, remote: AppState): AppState {
+  return normalize(mergeConcurrentValue(base, local, remote) as Partial<AppState>);
 }
 
 import type { CombinedShoppingList } from "./types";
@@ -105,6 +216,7 @@ interface StoreApi {
   deleteProductCategory: (name: ProductCategory) => void;
   saveCategory: (c: CategoryInfo) => void;
   deleteCategory: (id: string) => void;
+  saveEventType: (previousName: string | null, eventType: EventTypeInfo) => void;
   saveRecipe: (r: Recipe) => void;
   deleteRecipe: (id: string) => void;
   saveService: (s: Service) => void;
@@ -138,6 +250,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const lastRemoteUpdatedAt = useRef(0);
   const syncInitialized = useRef(!getRemoteSyncEnabled());
   const syncInProgress = useRef(false);
+  const syncRequested = useRef(false);
   const syncNow = useRef<(() => Promise<void>) | null>(null);
   const saveTimer = useRef<number | null>(null);
   latestState.current = state;
@@ -146,7 +259,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const synchronize = async () => {
-      if (cancelled || syncInProgress.current || !getRemoteSyncEnabled()) return;
+      if (cancelled || !getRemoteSyncEnabled()) return;
+      if (syncInProgress.current) {
+        syncRequested.current = true;
+        return;
+      }
       syncInProgress.current = true;
       if (!syncInitialized.current) setSyncStatus("connecting");
 
@@ -170,24 +287,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const remoteSnapshot = JSON.stringify(remoteState);
 
             if (localChangedWhileLoading) {
-              if (currentSnapshot !== remoteSnapshot) {
+              const mergedState = mergeConcurrentState(initialState.current, current, remoteState);
+              const mergedSnapshot = JSON.stringify(mergedState);
+              if (mergedSnapshot !== remoteSnapshot) {
                 setSyncStatus("syncing");
-                const savedAt = await saveRemoteSnapshot(current);
+                const savedAt = await saveRemoteSnapshot(mergedState);
                 lastRemoteUpdatedAt.current = Date.parse(savedAt);
-                lastSyncedState.current = currentSnapshot;
+                lastSyncedState.current = mergedSnapshot;
                 setLastSyncedAt(savedAt);
               } else {
                 lastRemoteUpdatedAt.current = remoteUpdatedAt;
-                lastSyncedState.current = remoteSnapshot;
+                lastSyncedState.current = mergedSnapshot;
                 setLastSyncedAt(remote.updatedAt);
               }
+              setState((value) => snapshotsEqual(value, current)
+                ? mergedState
+                : mergeConcurrentState(current, value, mergedState));
             } else {
               lastRemoteUpdatedAt.current = remoteUpdatedAt;
               lastSyncedState.current = remoteSnapshot;
               setLastSyncedAt(remote.updatedAt);
               setState((value) => {
                 const valueSnapshot = JSON.stringify(value);
-                if (valueSnapshot !== currentSnapshot && valueSnapshot !== remoteSnapshot) return value;
+                if (valueSnapshot !== currentSnapshot && valueSnapshot !== remoteSnapshot) {
+                  return mergeConcurrentState(current, value, remoteState);
+                }
                 return valueSnapshot === remoteSnapshot ? value : remoteState;
               });
             }
@@ -216,20 +340,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const remoteChanged = remoteSnapshot !== null && remoteSnapshot !== lastSyncedState.current;
 
         if (remote && remoteState && remoteSnapshot !== null && (remoteUpdatedAt > lastRemoteUpdatedAt.current || remoteChanged)) {
-          lastRemoteUpdatedAt.current = remoteUpdatedAt;
           if (isLocallyDirty) {
-            setSyncStatus("syncing");
-            const savedAt = await saveRemoteSnapshot(current);
-            lastRemoteUpdatedAt.current = Date.parse(savedAt);
-            lastSyncedState.current = currentSnapshot;
-            setLastSyncedAt(savedAt);
+            const baseState = lastSyncedState.current
+              ? normalize(JSON.parse(lastSyncedState.current) as Partial<AppState>)
+              : initialState.current;
+            const mergedState = mergeConcurrentState(baseState, current, remoteState);
+            const mergedSnapshot = JSON.stringify(mergedState);
+            if (mergedSnapshot !== remoteSnapshot) {
+              setSyncStatus("syncing");
+              const savedAt = await saveRemoteSnapshot(mergedState);
+              lastRemoteUpdatedAt.current = Date.parse(savedAt);
+              lastSyncedState.current = mergedSnapshot;
+              setLastSyncedAt(savedAt);
+            } else {
+              lastRemoteUpdatedAt.current = remoteUpdatedAt;
+              lastSyncedState.current = mergedSnapshot;
+              setLastSyncedAt(remote.updatedAt);
+            }
+            setState((value) => snapshotsEqual(value, current)
+              ? mergedState
+              : mergeConcurrentState(current, value, mergedState));
           } else {
+            lastRemoteUpdatedAt.current = remoteUpdatedAt;
             const previousSnapshot = lastSyncedState.current;
             lastSyncedState.current = remoteSnapshot;
             setLastSyncedAt(remote.updatedAt);
             setState((value) => {
               const valueSnapshot = JSON.stringify(value);
-              if (valueSnapshot !== previousSnapshot && valueSnapshot !== remoteSnapshot) return value;
+              if (valueSnapshot !== previousSnapshot && valueSnapshot !== remoteSnapshot) {
+                return mergeConcurrentState(current, value, remoteState);
+              }
               return valueSnapshot === remoteSnapshot ? value : remoteState;
             });
           }
@@ -252,6 +392,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSyncStatus("error");
       } finally {
         syncInProgress.current = false;
+        if (!cancelled && syncRequested.current) {
+          syncRequested.current = false;
+          window.setTimeout(() => void synchronize(), 0);
+        }
       }
     };
 
@@ -261,7 +405,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void synchronize();
     };
+    const onPageShow = () => void synchronize();
     window.addEventListener("online", synchronize);
+    window.addEventListener("focus", synchronize);
+    window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
@@ -269,6 +416,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncNow.current = null;
       window.clearInterval(interval);
       window.removeEventListener("online", synchronize);
+      window.removeEventListener("focus", synchronize);
+      window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
@@ -421,19 +570,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const saveCategory = (c: CategoryInfo) => {
-    setState((s) => ({
-      ...s,
-      categories: s.categories.some((x) => x.id === c.id)
-        ? s.categories.map((x) => (x.id === c.id ? c : x))
-        : [...s.categories, c],
-    }));
+    setState((s) => {
+      const previous = s.categories.find((category) => category.id === c.id);
+      return {
+        ...s,
+        categories: previous
+          ? s.categories.map((category) => category.id === c.id ? c : category)
+          : [...s.categories, c],
+        recipes: previous && previous.name !== c.name
+          ? s.recipes.map((recipe) => recipe.category === previous.name ? { ...recipe, category: c.name } : recipe)
+          : s.recipes,
+        eventTypes: previous && previous.name !== c.name
+          ? s.eventTypes.map((eventType) => ({
+              ...eventType,
+              excludedDishCategories: eventType.excludedDishCategories.map((name) => name === previous.name ? c.name : name),
+              hiddenInvoiceDishCategories: eventType.hiddenInvoiceDishCategories?.map((name) => name === previous.name ? c.name : name),
+            }))
+          : s.eventTypes,
+      };
+    });
   };
 
   const deleteCategory = (id: string) => {
-    setState((s) => ({
-      ...s,
-      categories: s.categories.filter((c) => c.id !== id),
-    }));
+    setState((s) => {
+      const deleted = s.categories.find((category) => category.id === id);
+      return {
+        ...s,
+        categories: s.categories.filter((category) => category.id !== id),
+        eventTypes: deleted
+          ? s.eventTypes.map((eventType) => ({
+              ...eventType,
+              excludedDishCategories: eventType.excludedDishCategories.filter((name) => name !== deleted.name),
+            }))
+          : s.eventTypes,
+      };
+    });
+  };
+
+  const saveEventType = (previousName: string | null, eventType: EventTypeInfo) => {
+    const name = eventType.name.trim();
+    if (!name) return;
+    setState((s) => {
+      const duplicate = s.eventTypes.some((item) => item.name === name && item.name !== previousName);
+      if (duplicate) return s;
+      const nextType = { ...eventType, name };
+      return {
+        ...s,
+        eventTypes: previousName
+          ? s.eventTypes.map((item) => item.name === previousName ? nextType : item)
+          : [...s.eventTypes, nextType],
+        events: previousName && previousName !== name
+          ? s.events.map((event) => event.type === previousName ? { ...event, type: name } : event)
+          : s.events,
+      };
+    });
   };
 
   const saveRecipe = (r: Recipe) => {
@@ -661,6 +851,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deleteProductCategory,
     saveCategory,
     deleteCategory,
+    saveEventType,
     saveRecipe,
     deleteRecipe,
     saveService,

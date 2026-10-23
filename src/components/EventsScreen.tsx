@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { EventPlan, EventType } from "../types";
-import { EVENT_TYPE_STYLE, EVENT_TYPES, compareProductCategories, isWeighed } from "../types";
+import type { EventPlan, EventType, EventTypeInfo } from "../types";
+import { compareProductCategories, eventTypeStyle, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, todayISO, uid } from "../utils";
+import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, shoppingPieceAmountLabel, todayISO, uid } from "../utils";
 import { DangerConfirm, EmptyState, Field, Modal, Segmented, Stepper, StepperInput, inputCls, useToast } from "./UI";
 import { IcCalendar, IcPlus, IcSearch, IcX, IcDoc, IcDownload, IcPrinter } from "./Icons";
 import { MultiShoppingPreview } from "./PrintDocs";
@@ -12,6 +12,7 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
   const { state, deleteEvent, deleteCombinedShoppingList } = useStore();
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [eventTypesOpen, setEventTypesOpen] = useState(false);
   const [editing, setEditing] = useState<EventPlan | null>(null);
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<EventType | "все">("все");
@@ -32,7 +33,7 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
   const toggleSelect = (id: string) => setSelected((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
   const selectedEvents = selected.map((id) => state.events.find((e) => e.id === id)).filter((e): e is EventPlan => !!e && e.date >= today);
   const hasFilters = q !== "" || typeFilter !== "все" || from !== "" || to !== "";
-  const filtered = useMemo(() => state.events.filter((e) => { const okQ = !q || e.name.toLowerCase().includes(q.trim().toLowerCase()); const okT = typeFilter === "все" || e.type === typeFilter; const okFrom = !from || e.date >= from; const okTo = !to || e.date <= to; return okQ && okT && okFrom && okTo; }).sort((a, b) => a.date.localeCompare(b.date)), [state.events, q, typeFilter, from, to]);
+  const filtered = useMemo(() => state.events.filter((e) => { const okQ = !q || e.name.toLowerCase().includes(q.trim().toLowerCase()); const knownType = state.eventTypes.some((eventType) => eventType.name === typeFilter); const okT = typeFilter === "все" || !knownType || e.type === typeFilter; const okFrom = !from || e.date >= from; const okTo = !to || e.date <= to; return okQ && okT && okFrom && okTo; }).sort((a, b) => a.date.localeCompare(b.date)), [state.events, state.eventTypes, q, typeFilter, from, to]);
   const visibleEvents = filtered.filter((event) => showPast ? event.date < today : event.date >= today);
   const upcomingCount = state.events.filter((e) => e.date >= today).length;
   const pastCount = state.events.length - upcomingCount;
@@ -40,11 +41,14 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
     <section className="px-5 pb-8 pt-6 md:px-8">
       <header className="reveal flex flex-wrap items-end justify-between gap-3">
         <div><h1 className="font-display text-[26px] leading-none text-cream">Мероприятия</h1><p className="mt-2 text-[13px] text-sage">{upcomingCount} предстоящих · {pastCount} прошедших · меню, услуги, скидки и документы</p></div>
-        <button onClick={() => { setEditing(null); setOpen(true); }} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Мероприятие</button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setEventTypesOpen(true)} className="tap rounded-[12px] border border-line bg-pine-800 px-3.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint">Типы мероприятий</button>
+          <button onClick={() => { setEditing(null); setOpen(true); }} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Мероприятие</button>
+        </div>
       </header>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <div className="relative w-full grow sm:min-w-[190px] sm:max-w-[260px]"><IcSearch size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sage" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Название…" className={inputCls + " pl-10"} /></div>
-        <Segmented options={[{ value: "все", label: "Все" }, ...EVENT_TYPES.map((t) => ({ value: t, label: t }))]} value={typeFilter} onChange={setTypeFilter} />
+        <Segmented options={[{ value: "все", label: "Все" }, ...state.eventTypes.map((eventType) => ({ value: eventType.name, label: eventType.name }))]} value={typeFilter} onChange={setTypeFilter} />
         <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:items-center sm:gap-1.5">
           <label className="min-w-0 text-[10px] font-semibold text-sage sm:flex sm:items-center sm:gap-1.5 sm:text-[12px]"><span>С</span><input aria-label="Дата начала" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls + " mt-1 min-w-0 py-2 text-[12px] sm:mt-0 sm:w-[138px] sm:text-[12.5px]"} /></label>
           <label className="min-w-0 text-[10px] font-semibold text-sage sm:flex sm:items-center sm:gap-1.5 sm:text-[12px]"><span>По</span><input aria-label="Дата окончания" type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls + " mt-1 min-w-0 py-2 text-[12px] sm:mt-0 sm:w-[138px] sm:text-[12.5px]"} /></label>
@@ -66,8 +70,8 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
           ) : (
         <div className="reveal mt-4 overflow-hidden rounded-[16px] border border-line bg-pine-850">
           {visibleEvents.map((e, i) => {
-            const sum = eventSummary(e, state.recipes, state.products);
-            const st = EVENT_TYPE_STYLE[e.type];
+            const sum = eventSummary(e, state.recipes, state.products, state.eventTypes);
+            const st = eventTypeStyle(e.type);
             const past = e.date < today;
             const isSel = selected.includes(e.id);
             const [day, mon] = fmtDateShort(e.date).split(" ");
@@ -126,6 +130,7 @@ export function EventsScreen({ onOpen }: { onOpen: (id: string) => void }) {
         </div>
       )}
       <EventSheet open={open} onClose={() => setOpen(false)} editing={editing} />
+      <EventTypesManager open={eventTypesOpen} onClose={() => setEventTypesOpen(false)} />
       {multiOpen && selectedEvents.length > 0 && <MultiShoppingPreview events={selectedEvents} onClose={() => setMultiOpen(false)} />}
       {viewingList && <CombinedShoppingListView list={viewingList} onClose={() => setViewingList(null)} />}
     </section>
@@ -182,7 +187,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
         return [[
           product.name,
           product.category,
-          isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount),
+          isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : shoppingPieceAmountLabel(product, item.amount, item.requiredAmount ?? item.amount),
           `${fmtMoney(product.price)}/${product.unit}`,
           fmtMoney(item.cost),
           item.purchasePlace ?? "",
@@ -286,7 +291,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
                           <div className="min-w-0 grow">
                             <p className={`text-[13px] font-semibold ${item.bought || item.inStock ? "text-sage" : "text-cream"}`}>{product.name}</p>
                             <p className="text-[10.5px] text-sage">
-                              {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount)} · {fmtMoney(item.cost)}
+                              {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : shoppingPieceAmountLabel(product, item.amount, item.requiredAmount ?? item.amount)} · {fmtMoney(item.cost)}
                             </p>
                             {item.usedIn.length > 0 && (
                               <div className="mt-1 text-[9px] text-sage">
@@ -357,7 +362,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
                     <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{product.name}</td>
                     <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{product.category}</td>
                     <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>
-                      {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount)}
+                      {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : shoppingPieceAmountLabel(product, item.amount, item.requiredAmount ?? item.amount)}
                     </td>
                     <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{fmtMoney(product.price)}/{product.unit}</td>
                     <td className="border-b p-2" style={{ borderColor: "#e0d5c8" }}>{fmtMoney(item.cost)}</td>
@@ -394,11 +399,115 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
   );
 }
 
+function EventTypesManager({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { state, saveEventType } = useStore();
+  const toast = useToast();
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [guestsPerTable, setGuestsPerTable] = useState("6");
+  const [excludedCategories, setExcludedCategories] = useState<string[]>([]);
+  const [hiddenInvoiceCategories, setHiddenInvoiceCategories] = useState<string[]>([]);
+  const editing = state.eventTypes.find((eventType) => eventType.name === editingName);
+  const dishCategories = [...new Set([
+    ...state.categories.map((category) => category.name),
+    ...state.recipes.map((recipe) => recipe.category),
+  ])];
+
+  const startEdit = (eventType?: EventTypeInfo) => {
+    setEditingName(eventType?.name ?? null);
+    setName(eventType?.name ?? "");
+    setGuestsPerTable(String(eventType?.defaultGuestsPerTable ?? 6));
+    setExcludedCategories(eventType?.excludedDishCategories ?? []);
+    setHiddenInvoiceCategories(eventType?.hiddenInvoiceDishCategories ?? []);
+    setEditorOpen(true);
+  };
+  const save = () => {
+    const normalizedName = name.trim();
+    const guests = parseInt(guestsPerTable, 10);
+    if (!normalizedName || !Number.isFinite(guests) || guests < 1) return;
+    if (state.eventTypes.some((eventType) => eventType.name === normalizedName && eventType.name !== editingName)) {
+      toast("Тип мероприятия с таким названием уже есть", "del");
+      return;
+    }
+    saveEventType(editingName, {
+      name: normalizedName,
+      defaultGuestsPerTable: guests,
+      excludedDishCategories: excludedCategories,
+      hiddenInvoiceDishCategories: hiddenInvoiceCategories,
+    });
+    setEditingName(null);
+    setEditorOpen(false);
+    toast(editing ? "Настройки типа обновлены" : "Тип мероприятия добавлен");
+  };
+  const closeEditor = () => {
+    setEditingName(null);
+    setEditorOpen(false);
+  };
+
+  return (
+    <Modal open={open} onClose={() => { closeEditor(); onClose(); }} title="Типы мероприятий" subtitle="Тип определяет число гостей за столом, состав стоимости и вид клиентского счёта." maxW="max-w-[680px]">
+      <div className="space-y-2">
+        {state.eventTypes.map((eventType) => (
+          <div key={eventType.name} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-line bg-pine-800 px-3.5 py-3">
+            <div className="min-w-0 grow">
+              <p className="text-[13px] font-semibold text-cream">{eventType.name}</p>
+              <p className="mt-0.5 text-[10.5px] text-sage">
+                {eventType.defaultGuestsPerTable} гостей за столом · исключить из суммы: {eventType.excludedDishCategories.join(", ") || "нет"}
+              </p>
+              <p className="text-[10.5px] text-sage">
+                Скрыть в счёте: {eventType.hiddenInvoiceDishCategories?.join(", ") || "ничего"}
+              </p>
+            </div>
+            <button onClick={() => startEdit(eventType)} className="tap rounded-[9px] border border-line px-3 py-1.5 text-[11px] font-semibold text-sage hover:text-saffron">Настроить</button>
+          </div>
+        ))}
+        <button onClick={() => startEdit()} className="tap flex w-full items-center justify-center gap-2 rounded-[11px] border border-dashed border-pine-500 py-2.5 text-[12px] font-semibold text-sage hover:border-saffron/40 hover:text-saffron"><IcPlus size={14} /> Добавить тип мероприятия</button>
+      </div>
+      {editorOpen && (
+        <div className="mt-4 rounded-[12px] border border-saffron/25 bg-pine-850 p-3.5">
+          <h3 className="mb-3 font-display text-[14px] text-cream">{editing ? "Настройки типа" : "Новый тип мероприятия"}</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Название"><input value={name} onChange={(event) => setName(event.target.value)} className={inputCls} /></Field>
+            <Field label="Гостей за столом по умолчанию"><input type="number" min={1} step={1} value={guestsPerTable} onChange={(event) => setGuestsPerTable(event.target.value)} inputMode="numeric" className={inputCls} /></Field>
+          </div>
+          <fieldset className="mt-3">
+            <legend className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-sage">Не включать в стоимость мероприятия</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {dishCategories.map((category) => (
+                <label key={`total-${category}`} className="flex cursor-pointer items-center gap-2 rounded-[9px] border border-line px-3 py-2 text-[12px] text-cream">
+                  <input type="checkbox" checked={excludedCategories.includes(category)} onChange={(event) => setExcludedCategories((current) => event.target.checked ? [...current, category] : current.filter((item) => item !== category))} className="h-4 w-4 accent-saffron" />
+                  {category}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="mt-4">
+            <legend className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-sage">Показывать в счёте для клиента</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {dishCategories.map((category) => (
+                <label key={`invoice-${category}`} className="flex cursor-pointer items-center gap-2 rounded-[9px] border border-line px-3 py-2 text-[12px] text-cream">
+                  <input type="checkbox" checked={!hiddenInvoiceCategories.includes(category)} onChange={(event) => setHiddenInvoiceCategories((current) => event.target.checked ? current.filter((item) => item !== category) : [...current, category])} className="h-4 w-4 accent-saffron" />
+                  {category}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="mt-3 flex gap-2">
+            <button onClick={closeEditor} className="tap rounded-[10px] border border-line px-4 py-2 text-[11px] font-semibold text-sage">Отмена</button>
+            <button onClick={save} disabled={!name.trim() || !Number.isInteger(Number(guestsPerTable)) || Number(guestsPerTable) < 1} className="tap grow rounded-[10px] bg-saffron px-4 py-2 text-[11px] font-bold text-pine-950 disabled:opacity-40">Сохранить</button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export function EventSheet({ open, onClose, editing }: { open: boolean; onClose: () => void; editing: EventPlan | null }) {
   const { state, saveEvent } = useStore();
   const toast = useToast();
   const [name, setName] = useState("");
-  const [type, setType] = useState<EventType>("Торжество");
+  const [type, setType] = useState<EventType>(state.eventTypes[0]?.name ?? "Торжество");
   const [date, setDate] = useState(todayISO());
   const [guests, setGuests] = useState(20);
   const [guestsPerTable, setGuestsPerTable] = useState(6);
@@ -406,14 +515,15 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
   const [sourceEventId, setSourceEventId] = useState("");
   useEffect(() => {
     if (open) {
-      setName(editing?.name ?? ""); setType(editing?.type ?? "Торжество");
+      const initialType = editing?.type ?? state.eventTypes[0]?.name ?? "Торжество";
+      setName(editing?.name ?? ""); setType(initialType);
       setDate(editing?.date ?? todayISO()); setGuests(editing?.guests ?? 20);
       setSourceEventId("");
-      const defaultGPT = (editing?.type ?? "Торжество") === "Торжество" ? 6 : 8;
+      const defaultGPT = state.eventTypes.find((eventType) => eventType.name === initialType)?.defaultGuestsPerTable ?? 6;
       setGuestsPerTable(editing?.guestsPerTable ?? defaultGPT);
       setTablesCount(editing?.tablesCount ?? Math.ceil((editing?.guests ?? 20) / defaultGPT));
     }
-  }, [open, editing]);
+  }, [open, editing, state.eventTypes]);
   const valid = name.trim().length > 0 && date !== "";
   const save = () => {
     if (!valid) return;
@@ -426,7 +536,7 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
     toast(editing ? "Мероприятие обновлено" : "Мероприятие создано"); onClose();
   };
   return (
-    <Modal open={open} onClose={onClose} title={editing ? "Мероприятие" : "Новое мероприятие"} subtitle="Тип влияет на оформление печатных форм" footer={
+    <Modal open={open} onClose={onClose} title={editing ? "Мероприятие" : "Новое мероприятие"} subtitle="Тип определяет число гостей за столом и категории блюд, включённые в стоимость" footer={
       <div className="flex items-center gap-3">
         <button onClick={onClose} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage hover:text-cream">Отмена</button>
         <button onClick={save} disabled={!valid} className="tap grow rounded-[14px] bg-saffron py-3 font-display text-[13px] font-bold text-pine-950 disabled:opacity-35">Сохранить</button>
@@ -435,7 +545,7 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
       <div className="space-y-5">
         <Field label="Название"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Свадьба Михаила и Елены" className={inputCls} autoFocus={!editing} /></Field>
         {!editing && <Field label="Создать на основе мероприятия"><select value={sourceEventId} onChange={(event) => setSourceEventId(event.target.value)} className={inputCls}><option value="">Без основы — пустое меню</option>{[...state.events].sort((a, b) => b.date.localeCompare(a.date)).map((event) => <option key={event.id} value={event.id}>{event.date} · {event.name}</option>)}</select><span className="mt-1 block text-[10.5px] text-sage">Будет скопировано только меню с блюдами.</span></Field>}
-        <Field label="Тип мероприятия"><div className="grid grid-cols-2 gap-2">{EVENT_TYPES.map((t) => { const st = EVENT_TYPE_STYLE[t]; const active = t === type; return (<button key={t} onClick={() => { setType(t); const gpt = t === "Торжество" ? 6 : 8; setGuestsPerTable(gpt); setTablesCount(Math.ceil(guests / gpt)); }} className="tap rounded-[12px] border py-3 text-[13px] font-semibold transition-colors" style={active ? { borderColor: st.fg, background: st.bg, color: st.fg } : { borderColor: "var(--color-line)", color: "var(--color-sage)" }}>{t}</button>); })}</div></Field>
+        <Field label="Тип мероприятия"><select value={type} onChange={(event) => { const selectedType = event.target.value; const guestsPerTableDefault = state.eventTypes.find((eventType) => eventType.name === selectedType)?.defaultGuestsPerTable ?? 6; setType(selectedType); setGuestsPerTable(guestsPerTableDefault); setTablesCount(Math.ceil(guests / guestsPerTableDefault)); }} className={inputCls}>{state.eventTypes.map((eventType) => <option key={eventType.name} value={eventType.name}>{eventType.name}</option>)}</select></Field>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Дата"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls + " font-display text-[13px]"} /></Field><Field label="Гостей"><StepperInput value={guests} onChange={(v) => { setGuests(v); setTablesCount(Math.ceil(v / guestsPerTable)); }} min={1} placeholder="Кол-во" /></Field></div>
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2"><Field label="Гостей за столом"><Stepper value={guestsPerTable} onChange={(v) => { setGuestsPerTable(v); setTablesCount(Math.ceil(guests / v)); }} min={1} /></Field><Field label="Столов"><Stepper value={tablesCount} onChange={setTablesCount} min={1} /></Field></div>
       </div>

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { CombinedShoppingList, DocKind, EventPlan } from "../types";
-import { CHEF_ORDER, EVENT_TYPE_STYLE, MENU_ORDER, SERVING_LABEL, amountUnitLabel, catStyle, compareProductCategories, isPieceUnit, isWeighed } from "../types";
+import { CHEF_ORDER, MENU_ORDER, SERVING_LABEL, amountUnitLabel, catStyle, compareProductCategories, eventTypeStyle, isPieceUnit, isWeighed, orderedRecipeCategories } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, comparePurchasePlaces, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, todayISO } from "../utils";
+import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, comparePurchasePlaces, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, shoppingPieceAmountLabel, todayISO } from "../utils";
 import { IcDownload, IcPrinter, IcX } from "./Icons";
 import { ServingBadge, inputCls, useToast } from "./UI";
 
@@ -31,7 +31,7 @@ function DocHeader({ note }: { note: string }) {
 
 function ChefDoc({ ev }: { ev: EventPlan }) {
   const { state } = useStore();
-  const sum = eventSummary(ev, state.recipes, state.products);
+  const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
   const totalRows = sum.dishes.reduce((s, d) => s + d.rows.length, 0);
   return (
     <div className="px-10 py-12" style={{ background: "#fefdfb" }}>
@@ -43,7 +43,7 @@ function ChefDoc({ ev }: { ev: EventPlan }) {
         </div>
         <p className="shrink-0 text-right text-[11.5px]" style={{ color: SOFT }}>{sum.dishes.length} {plural(sum.dishes.length, ["блюдо", "блюда", "блюд"])} · {sum.portions} порций</p>
       </div>
-      {CHEF_ORDER.map((cat) => {
+      {orderedRecipeCategories(state.categories, sum.dishes.map((dish) => dish.recipe.category), CHEF_ORDER).map((cat) => {
         const group = sum.dishes.filter((d) => d.recipe.category === cat);
         if (group.length === 0) return null;
         return (
@@ -192,7 +192,7 @@ function ShoppingDoc({ ev, sortMode }: { ev: EventPlan; sortMode: "category" | "
                           )}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
-                          {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount)}
+                          {isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : shoppingPieceAmountLabel(r.product, r.amount, r.requiredAmount)}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-[9.5px]" style={{ borderColor: RULE }}>
                           {ev.purchasePlaces?.[r.product.id] || "—"}
@@ -232,9 +232,10 @@ function ShoppingDoc({ ev, sortMode }: { ev: EventPlan; sortMode: "category" | "
 
 function InvoiceDoc({ ev }: { ev: EventPlan }) {
   const { state } = useStore();
-  const sum = eventSummary(ev, state.recipes, state.products);
-  const st = EVENT_TYPE_STYLE[ev.type];
+  const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
+  const st = eventTypeStyle(ev.type);
   const isFuneral = ev.type === "Поминки";
+  const invoiceTotal = sum.grand;
   const servicesTable = ev.services.length > 0 && (
     <div className={isFuneral ? "mt-2" : "mt-6"}>
       {!isFuneral && <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Услуги</p>}
@@ -275,8 +276,8 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
       {!isFuneral ? (
         <div className="mt-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Блюда по меню</p>
-          {MENU_ORDER.map((cat) => {
-            const group = sum.dishes.filter((d) => d.recipe.category === cat);
+          {orderedRecipeCategories(state.categories, sum.dishes.map((dish) => dish.recipe.category), MENU_ORDER).map((cat) => {
+            const group = sum.dishes.filter((d) => d.showInClientInvoice && d.recipe.category === cat);
             if (group.length === 0) return null;
             return (
               <div key={cat} className="mt-4">
@@ -299,7 +300,7 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{d.dish.portions}</td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(d.clientPerPortion)}</td>
-                        <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(d.clientPerPortion * d.dish.portions)}</td>
+                        <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{d.includedInEventTotal ? fmtMoney(d.clientPerPortion * d.dish.portions) : "Не входит в итог"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -321,7 +322,7 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
       ) : (
         <div className={ev.services.length > 0 ? "mt-5" : "mt-6"}>
           {(() => {
-            const additionalDishes = sum.dishes.filter((dish) => dish.recipe.category !== "Поминки");
+            const additionalDishes = sum.dishes.filter((dish) => dish.showInClientInvoice);
             return (
               <>
                 {additionalDishes.length > 0 && (
@@ -345,7 +346,7 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
                             </td>
                             <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{dish.dish.portions}</td>
                             <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(dish.clientPerPortion)}</td>
-                            <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{fmtMoney(dish.clientPerPortion * dish.dish.portions)}</td>
+                            <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>{dish.includedInEventTotal ? fmtMoney(dish.clientPerPortion * dish.dish.portions) : "Не входит в итог"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -378,7 +379,7 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
         <div className="w-[300px]">
           <div className="flex items-baseline justify-between border-t-2 pt-2.5" style={{ borderColor: INK }}>
             <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: SOFT }}>Итого к оплате</p>
-            <p className="font-display text-[24px]">{fmtMoney(sum.grand)}</p>
+            <p className="font-display text-[24px]">{fmtMoney(invoiceTotal)}</p>
           </div>
           {ev.guests > 0 && <p className="mt-1 text-right text-[10.5px]" style={{ color: SOFT }}>≈ {fmtMoney(sum.perGuest)} на гостя</p>}
         </div>
@@ -427,12 +428,13 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
     const wsData: any[][] = [];
     
     if (kind === "chef") {
+      const chefSummary = eventSummary(event, state.recipes, state.products, state.eventTypes);
       wsData.push(["Задание для поваров"]);
       wsData.push([event.name, fmtDateLong(event.date), `${event.guests} гостей`]);
       wsData.push([]);
       
-      CHEF_ORDER.forEach((cat) => {
-        const group = eventSummary(event, state.recipes, state.products).dishes.filter((d) => d.recipe.category === cat);
+      orderedRecipeCategories(state.categories, chefSummary.dishes.map((dish) => dish.recipe.category), CHEF_ORDER).forEach((cat) => {
+        const group = chefSummary.dishes.filter((d) => d.recipe.category === cat);
         if (group.length === 0) return;
         
         wsData.push([cat]);
@@ -474,7 +476,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
         wsData.push([
           r.product.name,
           r.product.category,
-          isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : pieceAmountLabel(r.product, r.amount),
+          isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : shoppingPieceAmountLabel(r.product, r.amount, r.requiredAmount),
           totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
           event.purchasePlaces?.[r.product.id] ?? "",
           `${fmtMoney(r.product.price)}/${r.product.unit}`,
@@ -487,15 +489,15 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
       wsData.push([]);
       wsData.push(["", "", "", "", "", "", "ИТОГО:", fmtMoney(total)]);
     } else if (kind === "invoice") {
-      const sum = eventSummary(event, state.recipes, state.products);
+      const sum = eventSummary(event, state.recipes, state.products, state.eventTypes);
       wsData.push(["Счёт для клиента"]);
       wsData.push([event.name, fmtDateLong(event.date), event.type]);
       wsData.push([]);
       
       if (event.type !== "Поминки") {
         wsData.push(["Блюда по меню"]);
-        MENU_ORDER.forEach((cat) => {
-          const group = sum.dishes.filter((d) => d.recipe.category === cat);
+        orderedRecipeCategories(state.categories, sum.dishes.map((dish) => dish.recipe.category), MENU_ORDER).forEach((cat) => {
+          const group = sum.dishes.filter((d) => d.showInClientInvoice && d.recipe.category === cat);
           if (group.length === 0) return;
           
           wsData.push([cat]);
@@ -505,7 +507,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
               d.recipe.name + (d.dish.discount > 0 ? ` (скидка -${d.dish.discount}%)` : ""),
               d.dish.portions,
               fmtMoney(d.clientPerPortion),
-              fmtMoney(d.clientPerPortion * d.dish.portions)
+              d.includedInEventTotal ? fmtMoney(d.clientPerPortion * d.dish.portions) : "Не входит в итог"
             ]);
           });
           wsData.push([]);
@@ -513,7 +515,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
         
         wsData.push(["", "", "Итого блюда:", fmtMoney(sum.foodAfterDiscount)]);
       } else {
-        const additionalDishes = sum.dishes.filter((dish) => dish.recipe.category !== "Поминки");
+        const additionalDishes = sum.dishes.filter((dish) => dish.showInClientInvoice);
         wsData.push(["Организация поминального стола"]);
         if (event.services.length > 0) {
           wsData.push(["Наименование", "Кол-во", "Цена", "Сумма"]);
@@ -530,7 +532,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
               dish.recipe.name + (dish.dish.discount > 0 ? ` (скидка -${dish.dish.discount}%)` : ""),
               dish.dish.portions,
               fmtMoney(dish.clientPerPortion),
-              fmtMoney(dish.clientPerPortion * dish.dish.portions),
+              dish.includedInEventTotal ? fmtMoney(dish.clientPerPortion * dish.dish.portions) : "Не входит в итог",
             ]);
           });
         }
@@ -606,7 +608,7 @@ export function MultiShoppingPreview({ events, onClose }: { events: EventPlan[];
       wsData.push([
         product.name,
         product.category,
-        isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount),
+        isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : shoppingPieceAmountLabel(product, item.amount, item.requiredAmount ?? item.amount),
         `${fmtMoney(product.price)}/${product.unit}`,
         fmtMoney(item.cost),
         usageList
@@ -743,7 +745,7 @@ function CombinedShoppingDoc({ list }: { list: CombinedShoppingList }) {
                           </div>
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
-                          {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : pieceAmountLabel(product, item.amount)}
+                          {isWeighed(product.unit) ? amountLabel(item.amount, product.unit) : shoppingPieceAmountLabel(product, item.amount, item.requiredAmount ?? item.amount)}
                         </td>
                         <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>
                           {fmtMoney(product.price)}/{product.unit}

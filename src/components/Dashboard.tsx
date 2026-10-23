@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Tab } from "../types";
-import { EVENT_TYPE_STYLE } from "../types";
+import { eventTypeStyle } from "../types";
 import { useStore } from "../store";
 import { daysUntil, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, plural, todayISO } from "../utils";
 import { Chip, useCountUp } from "./UI";
@@ -12,7 +12,7 @@ export function Dashboard({ onOpenEvent, onGoTab }: { onOpenEvent: (id: string) 
   const today = todayISO();
   const [taskOpen, setTaskOpen] = useState(false);
   const upcoming = useMemo(() => state.events.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date)), [state.events, today]);
-  const upcomingSum = useMemo(() => upcoming.reduce((s, e) => s + eventSummary(e, state.recipes, state.products).grand, 0), [upcoming, state.recipes, state.products]);
+  const upcomingSum = useMemo(() => upcoming.reduce((s, e) => s + eventSummary(e, state.recipes, state.products, state.eventTypes).grand, 0), [upcoming, state.recipes, state.products, state.eventTypes]);
   const animSum = useCountUp(upcomingSum, 700);
   const openTasks = useMemo(() => state.tasks.filter((t) => !t.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate)), [state.tasks]);
   const hour = new Date().getHours();
@@ -38,8 +38,8 @@ export function Dashboard({ onOpenEvent, onGoTab }: { onOpenEvent: (id: string) 
           ) : (
             <div className="space-y-2.5">
               {upcoming.slice(0, 4).map((e, i) => {
-                const sum = eventSummary(e, state.recipes, state.products);
-                const st = EVENT_TYPE_STYLE[e.type];
+                const sum = eventSummary(e, state.recipes, state.products, state.eventTypes);
+                const st = eventTypeStyle(e.type);
                 const soon = daysUntil(e.date) <= 14;
                 const [day, mon] = fmtDateShort(e.date).split(" ");
                 return (

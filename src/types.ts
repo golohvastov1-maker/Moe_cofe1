@@ -40,6 +40,19 @@ export const MENU_ORDER: Category[] = [
   "Напитки",
 ];
 
+export const orderedRecipeCategories = (
+  configuredCategories: CategoryInfo[],
+  usedCategories: string[],
+  preferredOrder: string[],
+): string[] => {
+  const used = new Set(usedCategories);
+  return [...new Set([
+    ...preferredOrder,
+    ...configuredCategories.map((category) => category.name),
+    ...usedCategories,
+  ])].filter((category) => used.has(category));
+};
+
 export const CAT_STYLE: Record<string, { fg: string; bg: string }> = {
   "Горячие блюда": { fg: "#f4a83a", bg: "rgba(244,168,58,0.13)" },
   "Холодные закуски": { fg: "#85c9e8", bg: "rgba(133,201,232,0.13)" },
@@ -59,13 +72,28 @@ export const SERVING_LABEL: Record<ServingStyle, string> = {
   shared: "Общим на стол",
 };
 
-export type EventType = "Торжество" | "Поминки";
+export type EventType = string;
 export const EVENT_TYPES: EventType[] = ["Торжество", "Поминки"];
 
-export const EVENT_TYPE_STYLE: Record<EventType, { fg: string; bg: string }> = {
+export interface EventTypeInfo {
+  name: EventType;
+  defaultGuestsPerTable: number;
+  excludedDishCategories: Category[];
+  hiddenInvoiceDishCategories?: Category[];
+}
+
+export const DEFAULT_EVENT_TYPES: EventTypeInfo[] = [
+  { name: "Торжество", defaultGuestsPerTable: 6, excludedDishCategories: [] },
+  { name: "Поминки", defaultGuestsPerTable: 8, excludedDishCategories: ["Поминки"] },
+];
+
+export const EVENT_TYPE_STYLE: Record<string, { fg: string; bg: string }> = {
   Торжество: { fg: "#f4a83a", bg: "rgba(244,168,58,0.13)" },
   Поминки: { fg: "#aebfd2", bg: "rgba(174,191,210,0.13)" },
 };
+
+export const eventTypeStyle = (type: EventType) =>
+  EVENT_TYPE_STYLE[type] ?? { fg: "#8fb3a2", bg: "rgba(143,179,162,0.13)" };
 
 export type ProductCategory = string;
 
@@ -226,6 +254,7 @@ export interface CombinedShoppingItem {
   productId: string;
   customProduct?: Product;
   amount: number;
+  requiredAmount?: number;
   cost: number;
   bought: boolean;
   inStock: boolean;
@@ -259,6 +288,7 @@ export interface AppState {
   productCategories: ProductCategory[];
   priceLog: PriceLogEntry[];
   categories: CategoryInfo[];
+  eventTypes: EventTypeInfo[];
   recipes: Recipe[];
   services: Service[];
   events: EventPlan[];
