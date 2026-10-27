@@ -158,11 +158,8 @@ function MenuTab({ ev, onAdd, onReplace, onEditDish, sortBy, setSortBy }: { ev: 
   const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
   const byCat = useMemo(() => {
     const m = new Map<Category, typeof sum.dishes>();
-    if (sortBy === "added") {
-      m.set("Порядок добавления", [...sum.dishes]);
-      return m;
-    }
     for (const d of sum.dishes) { const c = d.recipe.category; const arr = m.get(c); if (arr) arr.push(d); else m.set(c, [d]); }
+    if (sortBy === "added") return m;
     for (const [cat, dishes] of m.entries()) {
       const sorted = [...dishes].sort((a, b) => {
         if (sortBy === "name") return a.recipe.name.localeCompare(b.recipe.name, "ru");
@@ -198,7 +195,7 @@ function MenuTab({ ev, onAdd, onReplace, onEditDish, sortBy, setSortBy }: { ev: 
                     <div key={d.recipe.id} className="reveal rounded-[14px] border border-line bg-pine-800 p-3.5" style={{ animationDelay: `${Math.min(i * 40, 300)}ms` }}>
                       <div className="flex items-center gap-2">
                         <div className="min-w-0 grow">
-                          <div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{d.recipe.name}</p>{sortBy === "added" && <span className="rounded-full border border-line px-2 py-0.5 text-[9px] font-semibold text-sage">{d.recipe.category}</span>}<ServingBadge serving={d.recipe.serving} />{d.overridden && <span className="shrink-0 rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">состав изменён</span>}{d.dish.comment && <span className="shrink-0 rounded-full border border-saffron/30 bg-saffron/10 px-2 py-0.5 text-[9px] font-bold uppercase text-saffron">есть комментарий</span>}</div>
+                          <div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13.5px] font-semibold text-cream">{d.recipe.name}</p><ServingBadge serving={d.recipe.serving} />{d.overridden && <span className="shrink-0 rounded-full border border-glacier/30 bg-glacier/10 px-2 py-0.5 text-[9px] font-bold uppercase text-glacier">состав изменён</span>}{d.dish.comment && <span className="shrink-0 rounded-full border border-saffron/30 bg-saffron/10 px-2 py-0.5 text-[9px] font-bold uppercase text-saffron">есть комментарий</span>}</div>
                           <p className="mt-0.5 text-[11px] text-sage">{fmtMoney(basePer)} с чел-ка · выход {d.recipe.servingWeight} г{disc > 0 && <span className="text-coral"> · скидка −{disc}%</span>}</p>
                           {!d.includedInEventTotal && <p className="mt-0.5 text-[10px] font-semibold text-sage">Не учитывается в стоимости мероприятия</p>}
                           {d.dish.comment && <p className="mt-1 truncate text-[10.5px] text-saffron/80">* {d.dish.comment}</p>}
