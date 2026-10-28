@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { CombinedShoppingList, DocKind, EventPlan } from "../types";
 import { CHEF_ORDER, MENU_ORDER, SERVING_LABEL, amountUnitLabel, catStyle, compareProductCategories, eventTypeStyle, isPieceUnit, isWeighed, orderedRecipeCategories } from "../types";
 import { useStore } from "../store";
-import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, comparePurchasePlaces, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, recipeFinalPerPortion, recipeTotalWeight, shoppingPieceAmountLabel, todayISO } from "../utils";
+import { amountLabel, buildCombinedShoppingList, buildMultiShopping, buildShopping, comparePurchasePlaces, eventSummary, fmtDateLong, fmtMoney, fmtNum, pieceAmountLabel, plural, productPackageContentLabel, recipeFinalPerPortion, recipeTotalWeight, roundedPieceAmountLabel, shoppingPieceAmountLabel, todayISO } from "../utils";
 import { IcDownload, IcPrinter, IcX } from "./Icons";
 import { ServingBadge, inputCls, useToast } from "./UI";
 
@@ -87,14 +87,14 @@ function ChefDoc({ ev }: { ev: EventPlan }) {
                           <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{p.name}</td>
                           {d.recipe.serving === "shared" && (
                             <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>
-                              {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
+                              {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : roundedPieceAmountLabel(p, perPerson)}
                             </td>
                           )}
                           <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>
-                            {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(displayAmount, p.unit) : `${fmtNum(displayAmount)} ${p.unit}`}
+                            {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(displayAmount, p.unit) : roundedPieceAmountLabel(p, displayAmount)}
                           </td>
                           <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: RULE }}>
-                            {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(total, p.unit) : pieceAmountLabel(p, total)}
+                            {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(total, p.unit) : roundedPieceAmountLabel(p, total)}
                           </td>
                         </tr>
                       );
@@ -449,7 +449,7 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
               }
               const perPerson = row.amount / d.recipe.portions;
               const total = perPerson * event.guests;
-              wsData.push(["", p.name, isWeighed(p.unit) ? amountLabel(total, p.unit) : pieceAmountLabel(p, total)]);
+              wsData.push(["", p.name, isWeighed(p.unit) ? amountLabel(total, p.unit) : roundedPieceAmountLabel(p, total)]);
             }
           });
           if (d.dish.comment) {
@@ -469,15 +469,17 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
       wsData.push(["Сводный список закупок"]);
       wsData.push([event.name, fmtDateLong(event.date)]);
       wsData.push([]);
-      wsData.push(["Продукт", "Категория", "Нужно", "Общий вес", "Место покупки", "Цена/ед.", "Сумма", "В блюдах"]);
+      wsData.push(["Продукт", "Категория", "Нужно", "Содержимое", "Место покупки", "Цена/ед.", "Сумма", "В блюдах"]);
       
       rows.forEach((r) => {
-        const totalWeight = isWeighed(r.product.unit) ? r.amount : (r.product.netWeight ? r.amount * r.product.netWeight : null);
+        const totalContent = isWeighed(r.product.unit)
+          ? amountLabel(r.amount, r.product.unit)
+          : productPackageContentLabel(r.product, r.requiredAmount) ?? "";
         wsData.push([
           r.product.name,
           r.product.category,
           isWeighed(r.product.unit) ? amountLabel(r.amount, r.product.unit) : shoppingPieceAmountLabel(r.product, r.amount, r.requiredAmount),
-          totalWeight !== null ? (totalWeight >= 1000 ? `${fmtNum(totalWeight / 1000)} кг` : `${fmtNum(totalWeight)} г`) : "",
+          totalContent,
           event.purchasePlaces?.[r.product.id] ?? "",
           `${fmtMoney(r.product.price)}/${r.product.unit}`,
           fmtMoney(r.cost),

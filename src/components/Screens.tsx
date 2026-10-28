@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CategoryInfo, Product, ProductCategory, Unit } from "../types";
 import { UNITS, amountUnitLabel, productCatColor } from "../types";
 import { useStore } from "../store";
-import { downloadText, fmtDateShort, fmtMoney, fmtNum, parseNum, parsePriceFile, productsToCsv, round2, todayISO, uid } from "../utils";
+import { downloadText, fmtDateShort, fmtMoney, fmtNum, parseNum, parsePriceFile, productPackageContentLabel, productPackageContent, productsToCsv, round2, todayISO, uid } from "../utils";
 import { DangerConfirm, EmptyState, Field, Modal, Segmented, inputCls, selectCls, useToast } from "./UI";
 import { IcBasket, IcBriefcase, IcClock, IcDoc, IcDownload, IcPencil, IcPlus, IcSearch, IcUpload } from "./Icons";
 
@@ -90,7 +90,7 @@ export function ProductsScreen() {
                     <div key={p.id} role="button" tabIndex={0} onClick={() => { setEditing(p); setSheetOpen(true); }} className="reveal group flex cursor-pointer items-center gap-2.5 rounded-[13px] border border-line bg-pine-800 px-3.5 py-2.5 hover:border-pine-400">
                       <div className="min-w-0 grow">
                         <p className="truncate text-[13px] font-semibold text-cream">{p.name}</p>
-                        <p className="mt-0.5 text-[10.5px] text-sage">{p.unit}{p.netWeight ? ` · нетто ${fmtNum(p.netWeight)} г` : ""} · {fmtDateShort(p.updatedAt)}</p>
+                        <p className="mt-0.5 text-[10.5px] text-sage">{p.unit}{productPackageContentLabel(p, 1) ? ` · содержимое ${productPackageContentLabel(p, 1)} в ${p.unit}` : ""} · {fmtDateShort(p.updatedAt)}</p>
                       </div>
                       <p className="whitespace-nowrap font-display text-[13.5px] font-bold text-saffron">{fmtMoney(p.price)}</p>
                       <div className="shrink-0 opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
@@ -115,7 +115,7 @@ export function ProductsScreen() {
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-pine-850 px-2 py-0.5 text-[10.5px] font-semibold" style={{ color: productCatColor(p.category) }}>
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: productCatColor(p.category) }} />{p.category}
                 </span>
-                <span className="text-[10.5px] text-sage">{amountUnitLabel(p.unit)} / {p.unit}{p.netWeight ? ` · нетто ${fmtNum(p.netWeight)} г` : ""} · {fmtDateShort(p.updatedAt)}</span>
+                <span className="text-[10.5px] text-sage">{amountUnitLabel(p.unit)} / {p.unit}{productPackageContentLabel(p, 1) ? ` · содержимое ${productPackageContentLabel(p, 1)} в ${p.unit}` : ""} · {fmtDateShort(p.updatedAt)}</span>
               </div>
               <div className="mt-2.5 flex items-center justify-between border-t border-line pt-2.5">
                 <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-sage">за 1 {p.unit}</span>
@@ -143,18 +143,21 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
   const [unit, setUnit] = useState<Unit>("кг");
   const [category, setCategory] = useState<ProductCategory>("Прочие");
   const [price, setPrice] = useState("");
-  const [netWeight, setNetWeight] = useState("");
+  const [contentAmount, setContentAmount] = useState("");
+  const [contentUnit, setContentUnit] = useState<"г" | "мл" | "шт">("г");
   const piece = unit === "шт" || unit === "упак" || unit === "пучок" || unit === "зубчик";
   useEffect(() => {
     if (open) {
       setName(editing?.name ?? ""); setUnit(editing?.unit ?? "кг");
       setCategory(editing?.category ?? "Прочие");
       setPrice(editing ? String(editing.price).replace(".", ",") : "");
-      setNetWeight(editing?.netWeight ? String(editing.netWeight) : "");
+      const content = editing ? productPackageContent(editing) : null;
+      setContentAmount(content ? String(content.amount).replace(".", ",") : "");
+      setContentUnit(content?.unit ?? "г");
     }
   }, [open, editing]);
   const priceN = parseNum(price);
-  const netN = parseNum(netWeight);
+  const contentN = parseNum(contentAmount);
   const normalizedName = name.trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
   const duplicate = normalizedName
     ? state.products.find((product) =>
@@ -167,7 +170,9 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
   const history = editing ? state.priceLog.filter((l) => l.productId === editing.id).slice(0, 5) : [];
   const save = () => {
     if (!valid) return;
-    onSave({ id: editing?.id ?? uid(), name: name.trim(), unit, category, price: round2(priceN), netWeight: piece && netN > 0 ? round2(netN) : null, updatedAt: editing?.updatedAt ?? todayISO() });
+    const packageContentAmount = contentUnit === "шт" ? Math.round(contentN) : round2(contentN);
+    const packageContent = piece && packageContentAmount > 0 ? { amount: packageContentAmount, unit: contentUnit } : null;
+    onSave({ id: editing?.id ?? uid(), name: name.trim(), unit, category, price: round2(priceN), netWeight: packageContent?.unit === "г" ? packageContent.amount : null, packageContent, updatedAt: editing?.updatedAt ?? todayISO() });
     toast(editing ? "Продукт обновлён" : "Продукт добавлен");
     onClose();
   };
@@ -198,7 +203,7 @@ function ProductSheet({ open, onClose, editing, onSave }: { open: boolean; onClo
         </Field>
         <Field label="Категория"><div className="flex flex-wrap gap-1.5">{state.productCategories.map((c) => (<button key={c} onClick={() => setCategory(c)} className={`tap rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${category === c ? "" : "border-line bg-pine-700 text-sage hover:text-cream"}`} style={category === c ? { borderColor: productCatColor(c), background: `${productCatColor(c)}1f`, color: productCatColor(c) } : undefined}>{c}</button>))}</div></Field>
         <Field label="Единица измерения" hint={`цена за 1 ${unit}`}><div className="grid grid-cols-3 gap-2">{UNITS.map((u) => (<button key={u} onClick={() => setUnit(u)} className={`tap rounded-[11px] border py-2 text-[13px] font-semibold transition-colors ${u === unit ? "border-saffron bg-saffron text-pine-950" : "border-line bg-pine-700 text-sage hover:text-cream"}`}>{u}</button>))}</div></Field>
-        {piece && (<Field label="Масса нетто, г" hint="Укажите вес упаковки, чтобы в рецепте можно было вводить граммы"><div className="relative"><input value={netWeight} onChange={(e) => setNetWeight(e.target.value)} placeholder="Например, 400" inputMode="numeric" className={inputCls + " pr-10 font-display font-semibold"} /><span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] font-bold text-sage">г</span></div>{netN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">1 {unit} = {netN >= 1000 ? `${fmtNum(netN / 1000)} кг` : `${netN} г`}</span>)}</Field>)}
+        {piece && (<Field label="Содержимое 1 единицы" hint="Можно указать массу, объём или количество штук — это позволит вводить рецепт в соответствующих единицах."><div className="grid min-w-0 grid-cols-[minmax(0,1fr)_5rem] gap-2"><input type="text" value={contentAmount} onChange={(e) => setContentAmount(e.target.value)} placeholder="Например, 900" inputMode="decimal" className={inputCls + " min-w-0 font-display font-semibold"} /><select value={contentUnit} onChange={(e) => setContentUnit(e.target.value as "г" | "мл" | "шт")} className={selectCls + " min-w-0 shrink-0"} style={{ width: "5rem" }}><option value="г">г</option><option value="мл">мл</option><option value="шт">шт</option></select></div>{contentN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">1 {unit} = {fmtNum(contentN)} {contentUnit}</span>)}</Field>)}
         <Field label="Цена"><div className="relative"><input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" inputMode="decimal" className={inputCls + " pr-10 font-display font-semibold"} /><span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-display text-[13px] font-bold text-saffron">₽</span></div>{priceN > 0 && (<span className="mt-1.5 block text-[11.5px] text-mint">{fmtMoney(priceN)} за 1 {unit}</span>)}</Field>
         {history.length > 0 && (<div><p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-sage"><IcClock size={13} /> История цены</p><div className="space-y-1.5">{history.map((h) => { const up = h.oldPrice !== null && h.newPrice > h.oldPrice; const down = h.oldPrice !== null && h.newPrice < h.oldPrice; return (<div key={h.id} className="flex items-center justify-between rounded-[10px] border border-line bg-pine-700/60 px-3 py-2 text-[12.5px]"><span className="text-sage">{fmtDateShort(h.date)}</span><span className={up ? "font-semibold text-coral" : down ? "font-semibold text-mint" : "text-sage"}>{h.oldPrice === null ? "создание" : `${fmtMoney(h.oldPrice)} →`} <span className="font-display font-bold text-cream">{fmtMoney(h.newPrice)}</span></span></div>); })}</div></div>)}
       </div>

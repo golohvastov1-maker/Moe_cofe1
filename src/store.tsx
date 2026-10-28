@@ -45,6 +45,7 @@ function normalize(raw: Partial<AppState>): AppState {
         ...p,
         category: p.category ?? "Прочие",
         netWeight: p.netWeight ?? null,
+        packageContent: p.packageContent ?? (p.netWeight ? { amount: p.netWeight, unit: "г" } : null),
       }))
     : base.products;
   const productCategories = [...new Set([

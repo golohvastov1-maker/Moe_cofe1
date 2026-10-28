@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { formatPackageContent, productPackageContent } from "../utils";
 import type { ServingStyle } from "../types";
 import { IcCheck, IcMinus, IcPlate, IcPlus, IcTable, IcTrash, IcX } from "./Icons";
 
@@ -206,7 +207,8 @@ export function useCountUp(target: number, duration = 600): number {
 
 export function AmountEditor({ product, value, onChange }: { product: import("../types").Product; value: number; onChange: (v: number) => void }) {
   const weighed = product.unit === "кг" || product.unit === "л";
-  const canSwap = !weighed && (product.unit === "шт" || product.unit === "упак" || product.unit === "пучок" || product.unit === "зубчик") && !!product.netWeight && product.netWeight > 0;
+  const content = productPackageContent(product);
+  const canSwap = !weighed && (product.unit === "шт" || product.unit === "упак" || product.unit === "пучок" || product.unit === "зубчик") && !!content;
   
   // Автоматически определяем режим на основе значения
   const getInitialGramsMode = () => {
@@ -223,6 +225,7 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
   const [gramsMode, setGramsMode] = useState(getInitialGramsMode());
   const [userChangedMode, setUserChangedMode] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   
   // Обновляем режим при изменении значения извне (только если пользователь не менял вручную)
   useEffect(() => {
@@ -244,19 +247,20 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
         }
       }
     } else if (gramsMode && canSwap) {
-      const grams = Math.round(value * (product.netWeight ?? 1));
-      return String(grams || "");
+      const contentAmount = Math.round(value * (content?.amount ?? 1) * 1000) / 1000;
+      return contentAmount ? String(contentAmount).replace(".", ",") : "";
     } else {
       return String(value || "").replace(".", ",");
     }
   };
   
   useEffect(() => {
+    if (isEditing) return;
     const formatted = formatDisplay();
     if (inputValue !== formatted) {
       setInputValue(formatted);
     }
-  }, [value, gramsMode]);
+  }, [value, gramsMode, isEditing, inputValue]);
   
   const commit = (str: string) => {
     setInputValue(str);
@@ -271,7 +275,7 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
         onChange(Math.round(n * 1000));
       }
     } else if (gramsMode && canSwap) {
-      const units = n / (product.netWeight ?? 1);
+      const units = n / (content?.amount ?? 1);
       onChange(Math.round(units * 1_000_000) / 1_000_000);
     } else {
       onChange(Math.round(n * 100) / 100);
@@ -286,9 +290,9 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
     }
   };
   
-  const unitLbl = weighed 
+  const unitLbl = weighed
     ? (gramsMode ? (product.unit === "кг" ? "г" : "мл") : product.unit)
-    : product.unit;
+    : gramsMode && content ? content.unit : product.unit;
   
   return (
     <div className="flex items-center gap-2">
@@ -298,21 +302,25 @@ export function AmountEditor({ product, value, onChange }: { product: import("..
             {weighed ? product.unit : product.unit}
           </button>
           <button onClick={() => switchMode(true)} className={`tap rounded-[7px] px-2 py-1 text-[10.5px] font-bold ${gramsMode ? "bg-saffron text-pine-950" : "text-sage"}`}>
-            {weighed ? (product.unit === "кг" ? "г" : "мл") : "г"}
+            {weighed ? (product.unit === "кг" ? "г" : "мл") : content?.unit ?? "г"}
           </button>
         </div>
       )}
       <input 
         value={inputValue} 
         onChange={(e) => commit(e.target.value)} 
-        onBlur={() => setInputValue(formatDisplay())}
+        onFocus={() => setIsEditing(true)}
+        onBlur={() => {
+          setIsEditing(false);
+          setInputValue(formatDisplay());
+        }}
         inputMode="decimal" 
         placeholder="0" 
         className="w-20 rounded-[10px] border border-line bg-pine-800 px-2.5 py-1.5 text-right font-display text-[13px] font-semibold outline-none focus:border-saffron/60" 
       />
       <span className="w-9 text-xs text-sage">{unitLbl}</span>
       {canSwap && gramsMode && <span className="text-[10px] text-sage">≈ {new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 6 }).format(value)} {product.unit}</span>}
-      {canSwap && !gramsMode && product.netWeight && <span className="text-[10px] text-sage">= {value * product.netWeight >= 1000 ? `${(value * product.netWeight / 1000).toFixed(1)} кг` : `${value * product.netWeight} г`}</span>}
+      {canSwap && !gramsMode && content && <span className="text-[10px] text-sage">= {formatPackageContent(value * content.amount, content.unit)}</span>}
       {weighed && !gramsMode && value < 1000 && <span className="text-[10px] text-sage">= {value} г</span>}
       {weighed && gramsMode && value >= 1000 && <span className="text-[10px] text-sage">= {(value / 1000).toFixed(2)} {product.unit}</span>}
     </div>

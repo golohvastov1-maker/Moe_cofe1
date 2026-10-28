@@ -109,14 +109,36 @@ export const amountLabel = (amount: number, unit: Unit): string => {
   return `${fmtNum(amount)} ${unit === "кг" ? "г" : unit === "л" ? "мл" : unit}`;
 };
 
+export const productPackageContent = (product: Product): { amount: number; unit: "г" | "мл" | "шт" } | null =>
+  product.packageContent?.amount && product.packageContent.amount > 0
+    ? product.packageContent
+    : product.netWeight && product.netWeight > 0
+      ? { amount: product.netWeight, unit: "г" }
+      : null;
+
+export const formatPackageContent = (amount: number, unit: "г" | "мл" | "шт"): string => {
+  if (unit === "г" && amount >= 1000) return `${fmtNum(amount / 1000)} кг`;
+  if (unit === "мл" && amount >= 1000) return `${fmtNum(amount / 1000)} л`;
+  return `${fmtNum(amount)} ${unit}`;
+};
+
+export const productPackageContentLabel = (product: Product, packageAmount: number): string | null => {
+  const content = productPackageContent(product);
+  return content ? formatPackageContent(packageAmount * content.amount, content.unit) : null;
+};
+
 export const pieceAmountLabel = (product: Product, amount: number): string => {
   const unitAmount = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 6 }).format(amount);
   const base = `${unitAmount} ${product.unit}`;
-  if (product.netWeight && product.netWeight > 0) {
-    const totalGrams = amount * product.netWeight;
-    return `${base} · ${totalGrams >= 1000 ? `${fmtNum(totalGrams / 1000)} кг` : `${fmtNum(totalGrams)} г`}`;
-  }
-  return base;
+  const content = productPackageContentLabel(product, amount);
+  return content ? `${base} · ${content}` : base;
+};
+
+export const roundedPieceAmountLabel = (product: Product, amount: number): string => {
+  const roundedAmount = Math.round((amount + Number.EPSILON) * 100) / 100;
+  const base = `${fmtNum(roundedAmount)} ${product.unit}`;
+  const content = productPackageContentLabel(product, amount);
+  return content ? `${base} · ${content}` : base;
 };
 
 export const shoppingPieceAmountLabel = (
@@ -125,11 +147,8 @@ export const shoppingPieceAmountLabel = (
   requiredAmount = amount,
 ): string => {
   const base = `${fmtNum(ceilPurchaseAmount(amount))} ${product.unit}`;
-  if (product.netWeight && product.netWeight > 0) {
-    const requiredWeight = requiredAmount * product.netWeight;
-    return `${base} · ${requiredWeight >= 1000 ? `${fmtNum(requiredWeight / 1000)} кг` : `${fmtNum(requiredWeight)} г`}`;
-  }
-  return base;
+  const content = productPackageContentLabel(product, requiredAmount);
+  return content ? `${base} · ${content}` : base;
 };
 
 export const ceilPurchaseAmount = (amount: number): number => Math.ceil(amount - 1e-9);
@@ -156,8 +175,9 @@ export const recipeTotalWeight = (r: Recipe, products: Product[]): number => {
     if (isWeighed(p.unit)) {
       return sum + row.amount;
     }
-    if (p.netWeight && p.netWeight > 0) {
-      return sum + row.amount * p.netWeight;
+    const content = productPackageContent(p);
+    if (content?.unit === "г") {
+      return sum + row.amount * content.amount;
     }
     return sum;
   }, 0);
@@ -287,6 +307,7 @@ export function getAdditionalShoppingProduct(
     category: item.category ?? "Прочие",
     price: item.price ?? 0,
     netWeight: null,
+    packageContent: null,
     updatedAt: "",
   };
 }

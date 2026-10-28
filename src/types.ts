@@ -144,6 +144,7 @@ export interface Product {
   category: ProductCategory;
   price: number;
   netWeight: number | null;
+  packageContent?: { amount: number; unit: "г" | "мл" | "шт" } | null;
   updatedAt: string;
 }
 

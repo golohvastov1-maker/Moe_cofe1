@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import type { Category, CategoryInfo, IngredientRow, MarkupMode, Product, Recipe, ServingStyle } from "../types";
 import { SERVING_LABEL, amountUnitLabel, catStyle, compareProductCategories, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, recipeCost, recipeFinalPerPortion, recipePerPortion, recipeTotalWeight, round2, uid } from "../utils";
+import { amountLabel, downloadText, fmtMoney, fmtNum, ingredientCost, parseNum, pieceAmountLabel, recipeCost, recipeFinalPerPortion, recipePerPortion, recipeTotalWeight, roundedPieceAmountLabel, round2, uid } from "../utils";
 import { AmountEditor, DangerConfirm, EmptyState, Field, Modal, Segmented, ServingBadge, Stepper, inputCls, selectCls, textareaCls, useToast } from "./UI";
 import { IcDownload, IcHat, IcPlate, IcPlus, IcPrinter, IcSearch, IcTable, IcX } from "./Icons";
 import { CategoriesManager } from "./Screens";
@@ -290,8 +290,8 @@ function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => v
           const perPortion = row.amount / recipe.portions;
           return [[
             product.name,
-            isWeighed(product.unit) ? amountLabel(perPortion, product.unit) : `${fmtNum(perPortion)} ${product.unit}`,
-            isWeighed(product.unit) ? amountLabel(row.amount, product.unit) : pieceAmountLabel(product, row.amount),
+            isWeighed(product.unit) ? amountLabel(perPortion, product.unit) : roundedPieceAmountLabel(product, perPortion),
+            isWeighed(product.unit) ? amountLabel(row.amount, product.unit) : roundedPieceAmountLabel(product, row.amount),
           ]];
         }),
         [],
@@ -352,10 +352,10 @@ function TechCardPreview({ recipe, onClose }: { recipe: Recipe; onClose: () => v
                     <tr key={row.productId} style={{ background: idx % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
                       <td className="border-b py-1.5 pr-2" style={{ borderColor: "#e0d5c8" }}>{p.name}</td>
                       <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: "#e0d5c8" }}>
-                        {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : `${fmtNum(perPerson)} ${p.unit}`}
+                        {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(perPerson, p.unit) : roundedPieceAmountLabel(p, perPerson)}
                       </td>
                       <td className="border-b py-1.5 text-right font-semibold tabular-nums" style={{ borderColor: "#e0d5c8" }}>
-                        {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(row.amount, p.unit) : pieceAmountLabel(p, row.amount)}
+                        {row.toTaste ? "По вкусу" : isWeighed(p.unit) ? amountLabel(row.amount, p.unit) : roundedPieceAmountLabel(p, row.amount)}
                       </td>
                     </tr>
                   );
