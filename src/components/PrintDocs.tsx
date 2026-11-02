@@ -230,7 +230,7 @@ function ShoppingDoc({ ev, sortMode }: { ev: EventPlan; sortMode: "category" | "
   );
 }
 
-function InvoiceDoc({ ev }: { ev: EventPlan }) {
+function InvoiceDoc({ ev, showPrices }: { ev: EventPlan; showPrices: boolean }) {
   const { state } = useStore();
   const sum = eventSummary(ev, state.recipes, state.products, state.eventTypes);
   const st = eventTypeStyle(ev.type);
@@ -271,6 +271,88 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
         </div>
         <span className="shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: st.fg === "#aebfd2" ? "#5c6b80" : GOLD, background: "rgba(0,0,0,0.04)", border: `1px solid ${RULE}` }}>{ev.type}</span>
       </div>
+      {!showPrices ? (
+        <>
+          <div className="mt-6 rounded-[8px] border p-4" style={{ borderColor: RULE }}>
+            <p className="flex items-baseline justify-between gap-4 text-[12px]">
+              <span style={{ color: SOFT }}>Стоимость меню на одного гостя</span>
+              <strong className="font-display text-[16px]">{fmtMoney(ev.guests > 0 ? sum.foodAfterDiscount / ev.guests : 0)}</strong>
+            </p>
+            {ev.services.map((service) => (
+              <p key={service.id} className="mt-2 flex items-baseline justify-between gap-4 text-[12px]">
+                <span style={{ color: SOFT }}>{service.name}</span>
+                <strong className="tabular-nums">{fmtMoney(service.price * service.quantity)}</strong>
+              </p>
+            ))}
+            <p className="mt-2 flex items-baseline justify-between gap-4 border-t pt-2 text-[12px]" style={{ borderColor: RULE }}>
+              <span className="font-bold uppercase tracking-[0.08em]" style={{ color: SOFT }}>Общая стоимость с учётом услуг</span>
+              <strong className="font-display text-[21px]">{fmtMoney(invoiceTotal)}</strong>
+            </p>
+          </div>
+          <div className="mt-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Блюда по меню</p>
+            {orderedRecipeCategories(state.categories, sum.dishes.map((dish) => dish.recipe.category), MENU_ORDER).map((category) => {
+              const group = sum.dishes.filter((dish) => dish.showInClientInvoice && dish.recipe.category === category);
+              if (group.length === 0) return null;
+              return (
+                <div key={category} className="mt-4">
+                  <p className="border-b pb-1 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ borderColor: RULE, color: SOFT }}>{category}</p>
+                  <table className="mt-1 w-full border-collapse text-[11.5px]">
+                    <thead><tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
+                      <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Блюдо</th>
+                      <th className="border-b py-1.5 pr-2 text-right font-semibold" style={{ borderColor: RULE }}>Способ подачи</th>
+                      <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Порций</th>
+                    </tr></thead>
+                    <tbody>{group.map((dish, index) => (
+                      <tr key={dish.recipe.id} style={{ background: index % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                        <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{dish.recipe.name}</td>
+                        <td className="border-b py-1.5 pr-2 text-right" style={{ borderColor: RULE }}>{SERVING_LABEL[dish.recipe.serving]}</td>
+                        <td className="border-b py-1.5 text-right tabular-nums" style={{ borderColor: RULE }}>{dish.dish.portions}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+          {ev.services.length > 0 && (
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Услуги</p>
+              <table className="mt-2 w-full border-collapse text-[11.5px]">
+                <thead><tr className="text-left text-[9.5px] uppercase tracking-[0.1em]" style={{ color: SOFT, background: "#f5f0e8" }}>
+                  <th className="border-b py-1.5 pr-2 font-semibold" style={{ borderColor: RULE }}>Наименование</th>
+                  <th className="border-b py-1.5 text-right font-semibold" style={{ borderColor: RULE }}>Количество</th>
+                </tr></thead>
+                <tbody>{ev.services.map((service, index) => (
+                  <tr key={service.id} style={{ background: index % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                    <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{service.name}</td>
+                    <td className="border-b py-1.5 text-right tabular-nums" style={{ borderColor: RULE }}>{fmtNum(service.quantity)} {service.unit}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          {(ev.clientItems?.length ?? 0) > 0 && (
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Привозит/готовит клиент</p>
+              <table className="mt-2 w-full border-collapse text-[11.5px]"><tbody>
+                {ev.clientItems!.map((item, index) => (
+                  <tr key={item.id} style={{ background: index % 2 === 0 ? "#fefdfb" : "#faf6f0" }}>
+                    <td className="border-b py-1.5 pr-2" style={{ borderColor: RULE }}>{item.name}</td>
+                    <td className="border-b py-1.5 pr-2 text-right tabular-nums" style={{ borderColor: RULE }}>{item.amount} {item.unit}</td>
+                    <td className="border-b py-1.5 text-right" style={{ borderColor: RULE }}>{item.note ?? ""}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </div>
+          )}
+          <div className="mt-10 grid grid-cols-2 gap-10 text-[11px]" style={{ color: SOFT }}>
+            <div className="border-t pt-2" style={{ borderColor: INK }}>Исполнитель</div>
+            <div className="border-t pt-2" style={{ borderColor: INK }}>Заказчик</div>
+          </div>
+          <p className="mt-6 text-[9.5px] leading-relaxed" style={{ color: SOFT }}>{state.requisites.org} · {state.requisites.inn} · {state.requisites.account}</p>
+        </>
+      ) : <>
       {isFuneral && <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Организация поминального стола</p>}
       {isFuneral && servicesTable}
       {!isFuneral ? (
@@ -389,17 +471,19 @@ function InvoiceDoc({ ev }: { ev: EventPlan }) {
         <div className="border-t pt-2" style={{ borderColor: INK }}>Заказчик</div>
       </div>
       <p className="mt-6 text-[9.5px] leading-relaxed" style={{ color: SOFT }}>{state.requisites.org} · {state.requisites.inn} · {state.requisites.account}</p>
+      </>}
     </div>
   );
 }
 
-function PreviewShell({ title, subtitle, onClose, children, onExportExcel }: { title: string; subtitle: string; onClose: () => void; children: ReactNode; onExportExcel?: () => void }) {
+function PreviewShell({ title, subtitle, onClose, children, onExportExcel, toolbarContent }: { title: string; subtitle: string; onClose: () => void; children: ReactNode; onExportExcel?: () => void; toolbarContent?: ReactNode }) {
   return (
     <div className="print-host fixed inset-0 z-[80] overflow-y-auto bg-[#04100c]/97 scroll-thin print:static print:overflow-visible print:bg-white">
       <div className="no-print sticky top-0 z-10 border-b border-line bg-pine-900/95 backdrop-blur-md">
         <div className="mx-auto flex min-h-[54px] max-w-[860px] flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
           <button onClick={onClose} className="tap grid h-9 w-9 place-items-center rounded-full border border-line text-sage hover:text-cream" aria-label="Закрыть"><IcX size={16} /></button>
           <div className="min-w-0 grow"><p className="truncate font-display text-[14px] leading-tight">{title}</p><p className="truncate text-[10.5px] text-sage">{subtitle}</p></div>
+          {toolbarContent}
           {onExportExcel && <button onClick={onExportExcel} className="tap flex shrink-0 items-center gap-1.5 rounded-[11px] border border-line bg-pine-800 px-2.5 py-2 font-display text-[10.5px] font-bold text-sage hover:text-mint sm:gap-2 sm:px-3.5 sm:text-[11.5px]"><IcDownload size={14} /><span className="hidden min-[400px]:inline">Сохранить в Excel</span><span className="min-[400px]:hidden">Excel</span></button>}
           <button onClick={() => window.print()} className="tap flex shrink-0 items-center gap-1.5 rounded-[11px] bg-saffron px-2.5 py-2 font-display text-[10.5px] font-bold text-pine-950 hover:brightness-110 sm:gap-2 sm:px-3.5 sm:text-[11.5px]"><IcPrinter size={14} /><span className="hidden min-[400px]:inline">Сохранить в PDF</span><span className="min-[400px]:hidden">PDF</span></button>
         </div>
@@ -415,6 +499,7 @@ function PreviewShell({ title, subtitle, onClose, children, onExportExcel }: { t
 export function EventDocPreview({ kind, event, sortMode = "category", onClose }: { kind: DocKind; event: EventPlan; sortMode?: "category" | "place"; onClose: () => void }) {
   const { state } = useStore();
   const toast = useToast();
+  const [invoiceShowPrices, setInvoiceShowPrices] = useState(true);
   const titles: Record<DocKind, string> = { chef: "Задание для поваров", shopping: "Сводный список закупок", invoice: "Счёт для клиента" };
   
   const exportToExcel = async () => {
@@ -495,6 +580,34 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
       wsData.push(["Счёт для клиента"]);
       wsData.push([event.name, fmtDateLong(event.date), event.type]);
       wsData.push([]);
+      if (!invoiceShowPrices) {
+        wsData.push(["Стоимость меню на одного гостя", fmtMoney(event.guests > 0 ? sum.foodAfterDiscount / event.guests : 0)]);
+        event.services.forEach((service) => {
+          wsData.push([`Услуга: ${service.name}`, fmtMoney(service.price * service.quantity)]);
+        });
+        wsData.push(["Общая стоимость с учётом услуг", fmtMoney(sum.grand)]);
+        wsData.push([]);
+        wsData.push(["Блюда по меню"]);
+        orderedRecipeCategories(state.categories, sum.dishes.map((dish) => dish.recipe.category), MENU_ORDER).forEach((category) => {
+          const group = sum.dishes.filter((dish) => dish.showInClientInvoice && dish.recipe.category === category);
+          if (group.length === 0) return;
+          wsData.push([category]);
+          wsData.push(["Блюдо", "Способ подачи", "Порций"]);
+          group.forEach((dish) => wsData.push([dish.recipe.name, SERVING_LABEL[dish.recipe.serving], dish.dish.portions]));
+          wsData.push([]);
+        });
+        if (event.services.length > 0) {
+          wsData.push(["Услуги"]);
+          wsData.push(["Наименование", "Количество"]);
+          event.services.forEach((service) => wsData.push([service.name, `${fmtNum(service.quantity)} ${service.unit}`]));
+          wsData.push([]);
+        }
+        if (event.clientItems?.length) {
+          wsData.push(["Привозит/готовит клиент"]);
+          wsData.push(["Наименование", "Количество", "Комментарий"]);
+          event.clientItems.forEach((item) => wsData.push([item.name, `${item.amount} ${item.unit}`, item.note ?? ""]));
+        }
+      } else {
       
       if (event.type !== "Поминки") {
         wsData.push(["Блюда по меню"]);
@@ -551,18 +664,24 @@ export function EventDocPreview({ kind, event, sortMode = "category", onClose }:
       
       wsData.push([]);
       wsData.push(["", "", "ИТОГО К ОПЛАТЕ:", fmtMoney(sum.grand)]);
+      }
     }
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(wb, ws, titles[kind]);
-    XLSX.writeFile(wb, `${titles[kind]} - ${event.name}.xlsx`);
+    XLSX.writeFile(wb, `${titles[kind]}${kind === "invoice" && !invoiceShowPrices ? " без цен" : ""} - ${event.name}.xlsx`);
   };
   
   return (
-    <PreviewShell title={titles[kind]} subtitle={event.name} onClose={onClose} onExportExcel={exportToExcel}>
+    <PreviewShell title={titles[kind]} subtitle={event.name} onClose={onClose} onExportExcel={exportToExcel} toolbarContent={kind === "invoice" ? (
+      <div className="flex shrink-0 rounded-[9px] border border-line bg-pine-800 p-0.5">
+        <button type="button" aria-pressed={invoiceShowPrices} onClick={() => setInvoiceShowPrices(true)} className={`tap rounded-[7px] px-2 py-1.5 text-[10px] font-bold ${invoiceShowPrices ? "bg-saffron text-pine-950" : "text-sage"}`}>С ценами</button>
+        <button type="button" aria-pressed={!invoiceShowPrices} onClick={() => setInvoiceShowPrices(false)} className={`tap rounded-[7px] px-2 py-1.5 text-[10px] font-bold ${!invoiceShowPrices ? "bg-saffron text-pine-950" : "text-sage"}`}>Без цен</button>
+      </div>
+    ) : undefined}>
       {kind === "chef" && <ChefDoc ev={event} />}
       {kind === "shopping" && <ShoppingDoc ev={event} sortMode={sortMode} />}
-      {kind === "invoice" && <InvoiceDoc ev={event} />}
+      {kind === "invoice" && <InvoiceDoc ev={event} showPrices={invoiceShowPrices} />}
     </PreviewShell>
   );
 }
