@@ -388,16 +388,23 @@ export function CategoriesManager({ open, onClose }: { open: boolean; onClose: (
   const { state, saveCategory, deleteCategory, moveCategory } = useStore();
   const toast = useToast();
   const [editing, setEditing] = useState<CategoryInfo | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [name, setName] = useState("");
   const [color, setColor] = useState("#f4a83a");
+  useEffect(() => {
+    if (!open) {
+      setEditorOpen(false);
+      setEditing(null);
+    }
+  }, [open]);
   const COLORS = ["#f4a83a", "#85c9e8", "#7ed9b0", "#8fd0c9", "#eb9cc3", "#aebfd2", "#e9684f", "#f07358", "#6ee7b7", "#7dd3fc", "#f0abcf", "#b8c9db"];
-  const openNew = () => { setEditing(null); setName(""); setColor("#f4a83a"); };
-  const openEdit = (c: CategoryInfo) => { setEditing(c); setName(c.name); setColor(c.color); };
+  const openNew = () => { setEditing(null); setName(""); setColor("#f4a83a"); setEditorOpen(true); };
+  const openEdit = (c: CategoryInfo) => { setEditing(c); setName(c.name); setColor(c.color); setEditorOpen(true); };
   const save = () => {
     if (!name.trim()) return;
     saveCategory({ id: editing?.id ?? uid(), name: name.trim(), color, isDefault: editing?.isDefault ?? false });
     toast(editing ? "Категория обновлена" : "Категория добавлена");
-    setEditing(null); setName("");
+    setEditing(null); setName(""); setEditorOpen(false);
   };
   const del = (id: string) => { deleteCategory(id); toast("Категория удалена", "del"); };
   return (
@@ -425,10 +432,10 @@ export function CategoriesManager({ open, onClose }: { open: boolean; onClose: (
           </div>
         </div>
       </Modal>
-      {editing !== null && (
-        <Modal open onClose={() => setEditing(null)} title={editing ? "Редактировать категорию" : "Новая категория"} footer={
+      {editorOpen && (
+        <Modal open onClose={() => { setEditing(null); setEditorOpen(false); }} title={editing ? "Редактировать категорию" : "Новая категория"} footer={
           <div className="flex items-center gap-3">
-            <button onClick={() => setEditing(null)} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage hover:text-cream">Отмена</button>
+            <button onClick={() => { setEditing(null); setEditorOpen(false); }} className="tap shrink-0 rounded-[14px] border border-line px-5 py-3 font-display text-[13px] font-bold text-sage hover:text-cream">Отмена</button>
             <button onClick={save} disabled={!name.trim()} className="tap grow rounded-[14px] bg-saffron py-3 font-display text-[13px] font-bold text-pine-950 disabled:opacity-35">Сохранить</button>
           </div>
         }>
