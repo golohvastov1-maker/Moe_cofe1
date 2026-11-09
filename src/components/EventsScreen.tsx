@@ -141,6 +141,7 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
   const { state, setShoppingStatus, setPurchasePlace } = useStore();
   const toast = useToast();
   const [sortMode, setSortMode] = useState<"category" | "place">("category");
+  const [groupFilter, setGroupFilter] = useState("all");
   const currentList = state.combinedShoppingLists.find((entry) => entry.id === list.id) ?? list;
 
   const toggle = (productId: string, field: "bought" | "inStock") => {
@@ -165,15 +166,34 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
   const total = currentList.items.reduce((s, item) => s + item.cost, 0);
   const boughtCount = currentList.items.filter((i) => i.bought).length;
   const inStockCount = currentList.items.filter((i) => i.inStock).length;
-  const orderedItems = sortMode === "place"
-    ? [...currentList.items].sort((a, b) => {
-        const byPlace = comparePurchasePlaces(a.purchasePlace, b.purchasePlace);
-        if (byPlace !== 0) return byPlace;
-        const nameA = (state.products.find((product) => product.id === a.productId) ?? a.customProduct)?.name ?? "";
-        const nameB = (state.products.find((product) => product.id === b.productId) ?? b.customProduct)?.name ?? "";
-        return nameA.localeCompare(nameB, "ru");
-      })
-    : currentList.items;
+  const getProduct = (item: CombinedShoppingList["items"][number]) =>
+    state.products.find((product) => product.id === item.productId) ?? item.customProduct;
+  const groupOptions = sortMode === "category"
+    ? [...new Set(currentList.items.flatMap((item) => {
+        const product = getProduct(item);
+        return product ? [product.category] : [];
+      }))].sort((a, b) => compareProductCategories(a, b, state.productCategories))
+    : [...new Set(currentList.items.map((item) => item.purchasePlace?.trim() ?? ""))].sort(comparePurchasePlaces);
+  const orderedItems = [...currentList.items].sort((a, b) => {
+    const productA = getProduct(a);
+    const productB = getProduct(b);
+    const groupA = sortMode === "category" ? productA?.category ?? "" : a.purchasePlace?.trim() ?? "";
+    const groupB = sortMode === "category" ? productB?.category ?? "" : b.purchasePlace?.trim() ?? "";
+    const byGroup = sortMode === "category"
+      ? compareProductCategories(groupA, groupB, state.productCategories)
+      : comparePurchasePlaces(groupA, groupB);
+    if (byGroup !== 0) return byGroup;
+    const doneA = a.bought || a.inStock;
+    const doneB = b.bought || b.inStock;
+    if (doneA !== doneB) return Number(doneA) - Number(doneB);
+    return (productA?.name ?? "").localeCompare(productB?.name ?? "", "ru");
+  });
+  const visibleItems = orderedItems.filter((item) => {
+    if (groupFilter === "all") return true;
+    const product = getProduct(item);
+    const group = sortMode === "category" ? product?.category ?? "" : item.purchasePlace?.trim() ?? "";
+    return groupFilter === (group || "__no_place__");
+  });
   const exportToExcel = async () => {
     try {
       const XLSX = await import("xlsx");
@@ -255,12 +275,22 @@ function CombinedShoppingListView({ list, onClose }: { list: CombinedShoppingLis
           </div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-sage">Итого к закупке: <span className="font-display font-bold text-saffron">{fmtMoney(total)}</span></p>
-            <Segmented options={[{ value: "category", label: "По категориям" }, { value: "place", label: "По месту покупки" }]} value={sortMode} onChange={setSortMode} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented options={[{ value: "category", label: "По категориям" }, { value: "place", label: "По месту покупки" }]} value={sortMode} onChange={(mode) => { setSortMode(mode); setGroupFilter("all"); }} />
+              <select aria-label={sortMode === "category" ? "Фильтр по категории" : "Фильтр по месту покупки"} value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} className={inputCls + " !w-auto max-w-[190px] py-1.5 text-[11px]"}>
+                <option value="all">{sortMode === "category" ? "Все категории" : "Все места покупки"}</option>
+                {groupOptions.map((option) => (
+                  <option key={option || "__no_place__"} value={option || "__no_place__"}>
+                    {option || "Место не указано"}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           {(() => {
             const groups = new Map<string, typeof currentList.items>();
-            for (const item of currentList.items) {
-              const product = state.products.find((p) => p.id === item.productId) ?? item.customProduct;
+            for (const item of visibleItems) {
+              const product = getProduct(item);
               if (!product) continue;
               const place = item.purchasePlace?.trim();
               const key = sortMode === "category" ? product.category : place ?? "";

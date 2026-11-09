@@ -448,6 +448,7 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
   const { state, saveEvent, setShoppingStatus, setPurchasePlace } = useStore();
   const toast = useToast();
   const [sortMode, setSortMode] = useState<"category" | "place">("category");
+  const [groupFilter, setGroupFilter] = useState("all");
   const [extraMode, setExtraMode] = useState<"product" | "custom">("product");
   const [extraProductId, setExtraProductId] = useState("");
   const [extraAmount, setExtraAmount] = useState("");
@@ -466,6 +467,14 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
   });
   const bought = new Set(ev.bought ?? []);
   const inStock = new Set(ev.inStock ?? []);
+  const groupOptions = sortMode === "category"
+    ? [...new Set(shopping.map((row) => row.product.category))].sort((a, b) => compareProductCategories(a, b, state.productCategories))
+    : [...new Set(shopping.map((row) => ev.purchasePlaces?.[row.product.id]?.trim() ?? ""))].sort(comparePurchasePlaces);
+  const filteredShopping = shopping.filter((row) => {
+    if (groupFilter === "all") return true;
+    const group = sortMode === "category" ? row.product.category : ev.purchasePlaces?.[row.product.id]?.trim() ?? "";
+    return groupFilter === (group || "__no_place__");
+  });
   const addExtraItem = () => {
     const amount = parseNum(extraAmount);
     const price = parseNum(extraPrice);
@@ -585,14 +594,22 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
           <h2 className="flex items-center gap-2 font-display text-[15px]"><IcCart size={16} className="text-mint" /> Список покупок</h2>
           <div className="flex flex-wrap items-center gap-2">
             {shopping.length > 0 && <span className="text-[11px] font-semibold text-sage">к закупке {toBuy.length} из {shopping.length} · {fmtMoney(toBuySum)}</span>}
-            <Segmented options={[{ value: "category", label: "По категориям" }, { value: "place", label: "По месту покупки" }]} value={sortMode} onChange={setSortMode} />
+            <Segmented options={[{ value: "category", label: "По категориям" }, { value: "place", label: "По месту покупки" }]} value={sortMode} onChange={(mode) => { setSortMode(mode); setGroupFilter("all"); }} />
+            <select aria-label={sortMode === "category" ? "Фильтр по категории" : "Фильтр по месту покупки"} value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} className={inputCls + " !w-auto max-w-[190px] py-1.5 text-[11px]"}>
+              <option value="all">{sortMode === "category" ? "Все категории" : "Все места покупки"}</option>
+              {groupOptions.map((option) => (
+                <option key={option || "__no_place__"} value={option || "__no_place__"}>
+                  {option || "Место не указано"}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         {shopping.length === 0 ? (<p className="rounded-[12px] border border-dashed border-pine-500/70 px-4 py-4 text-center text-[12.5px] text-sage">Появится автоматически из ингредиентов всех блюд меню и дополнительных позиций</p>) : (
           <div className="space-y-5">
             {(() => {
               const groups = new Map<string, typeof shopping>();
-              for (const row of shopping) {
+              for (const row of filteredShopping) {
                 const place = ev.purchasePlaces?.[row.product.id]?.trim();
                 const key = sortMode === "category" ? row.product.category : place ?? "";
                 const group = groups.get(key);
@@ -603,7 +620,11 @@ function DocsTab({ ev, onOpenDoc }: { ev: EventPlan; onOpenDoc: (k: DocKind, sor
                 ? compareProductCategories(a, b, state.productCategories)
                 : comparePurchasePlaces(a, b));
               return sortedGroups.map((groupName) => {
-                const items = groups.get(groupName)!;
+                const items = [...groups.get(groupName)!].sort((a, b) => {
+                  const doneA = bought.has(a.product.id) || inStock.has(a.product.id);
+                  const doneB = bought.has(b.product.id) || inStock.has(b.product.id);
+                  return Number(doneA) - Number(doneB) || a.product.name.localeCompare(b.product.name, "ru");
+                });
                 const categoryTotal = items.reduce((s, r) => s + r.cost, 0);
                 const categoryToBuy = items.filter((r) => !bought.has(r.product.id) && !inStock.has(r.product.id));
                 return (
