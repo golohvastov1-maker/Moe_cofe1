@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { EventPlan, EventType, EventTypeInfo } from "../types";
 import { compareProductCategories, eventTypeStyle, isWeighed } from "../types";
 import { useStore } from "../store";
-import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, pieceAmountLabel, plural, shoppingPieceAmountLabel, todayISO, uid } from "../utils";
+import { amountLabel, comparePurchasePlaces, daysUntilLabel, eventSummary, fmtDateShort, fmtMoney, isGuestCountUnit, pieceAmountLabel, plural, shoppingPieceAmountLabel, todayISO, uid } from "../utils";
 import { DangerConfirm, EmptyState, Field, Modal, Segmented, Stepper, StepperInput, inputCls, useToast } from "./UI";
 import { IcCalendar, IcPlus, IcSearch, IcX, IcDoc, IcDownload, IcPrinter } from "./Icons";
 import { MultiShoppingPreview } from "./PrintDocs";
@@ -566,7 +566,16 @@ export function EventSheet({ open, onClose, editing }: { open: boolean; onClose:
       ...dish,
       overrides: dish.overrides?.map((row) => ({ ...row })) ?? null,
     })) ?? [];
-    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes, additionalShoppingItems: editing?.additionalShoppingItems ?? [], services: editing?.services ?? [], clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], purchasePlaces: editing?.purchasePlaces ?? {}, comment: editing?.comment });
+    const guestRatio = editing && editing.guests > 0 ? guests / editing.guests : 1;
+    const updatedDishes = editing && guests !== editing.guests
+      ? dishes.map((dish) => ({ ...dish, portions: Math.max(1, Math.round(dish.portions * guestRatio)) }))
+      : dishes;
+    const services = (editing?.services ?? []).map((service) =>
+      editing && guests !== editing.guests && isGuestCountUnit(service.unit)
+        ? { ...service, quantity: guests }
+        : service,
+    );
+    saveEvent({ id: editing?.id ?? uid(), name: name.trim(), type, date, guests, guestsPerTable, tablesCount, discount: editing?.discount ?? 0, dishes: updatedDishes, additionalShoppingItems: editing?.additionalShoppingItems ?? [], services, clientItems: editing?.clientItems ?? [], bought: editing?.bought ?? [], inStock: editing?.inStock ?? [], purchasePlaces: editing?.purchasePlaces ?? {}, comment: editing?.comment });
     toast(editing ? "Мероприятие обновлено" : "Мероприятие создано"); onClose();
   };
   return (

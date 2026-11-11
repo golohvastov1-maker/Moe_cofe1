@@ -16,6 +16,11 @@ export const uid = () =>
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
+export const isGuestCountUnit = (unit: string): boolean => {
+  const normalized = unit.toLocaleLowerCase("ru").replace(/[^а-яё]/g, "");
+  return ["чел", "челк", "человек", "гост"].some((part) => normalized.includes(part));
+};
+
 export const fmtMoney = (n: number, digits = 0): string =>
   new Intl.NumberFormat("ru-RU", {
     maximumFractionDigits: digits,

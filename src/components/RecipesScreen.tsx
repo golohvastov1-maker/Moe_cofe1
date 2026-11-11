@@ -73,7 +73,7 @@ export function RecipesScreen() {
                           <p className="font-display text-[15px] font-bold leading-tight text-saffron">{fmtMoney(recipeFinalPerPortion(r, state.products))}</p>
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-sage">цена с чел-ка</p>
                         </div>
-                        <div className="ml-auto flex shrink-0 items-center gap-1 opacity-60 group-hover:opacity-100 sm:ml-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="ml-auto flex shrink-0 items-center gap-1 opacity-90 sm:ml-0 sm:opacity-60 sm:group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                           <button onClick={() => setTechCardPreview(r)} aria-label="Печать тех.карты" className="tap grid h-8 w-8 place-items-center rounded-[10px] border border-line text-sage hover:border-mint/50 hover:text-mint" title="Печать тех.карты"><IcPrinter size={14} /></button>
                           <DangerConfirm onConfirm={() => { deleteRecipe(r.id); toast("Рецепт удалён", "del"); }} />
                         </div>

@@ -74,7 +74,7 @@ export function Modal({ open, onClose, title, subtitle, footer, maxW = "max-w-[5
           </button>
         </div>
         <div className="scroll-thin grow overflow-y-auto px-5 pb-2">{children}</div>
-        {footer && <div className="border-t border-line bg-pine-850/80 px-3 py-3 shadow-[0_-12px_30px_rgba(0,0,0,0.25)] sm:px-5 sm:py-4">{footer}</div>}
+        {footer && <div className="border-t border-line bg-pine-850/80 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_30px_rgba(0,0,0,0.25)] sm:px-5 sm:py-4">{footer}</div>}
       </div>
     </div>
   );
@@ -125,11 +125,11 @@ export function StepperInput({ value, onChange, min = 1, small = false, placehol
 
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex max-w-full flex-wrap gap-1 rounded-[13px] border border-line bg-pine-800 p-1">
+    <div className="no-scrollbar inline-flex w-fit max-w-full flex-nowrap gap-1 overflow-x-auto rounded-[13px] border border-line bg-pine-800 p-1">
       {options.map((o) => {
         const active = o.value === value;
         return (
-          <button key={o.value} onClick={() => onChange(o.value)} className={`tap whitespace-nowrap rounded-[9px] px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${active ? "bg-saffron text-pine-950" : "text-sage hover:text-cream"}`}>
+          <button key={o.value} onClick={() => onChange(o.value)} className={`tap shrink-0 whitespace-nowrap rounded-[9px] px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${active ? "bg-saffron text-pine-950" : "text-sage hover:text-cream"}`}>
             {o.label}
           </button>
         );

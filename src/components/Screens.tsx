@@ -50,10 +50,10 @@ export function ProductsScreen() {
         </div>
         <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); }} />
-          <button onClick={() => fileRef.current?.click()} disabled={importing} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint disabled:opacity-50 sm:px-3.5"><IcUpload size={15} /> <span className="hidden md:inline">{importing ? "Читаем…" : "Импорт CSV/XLSX"}</span></button>
-          <button onClick={() => { downloadText("price-list.csv", productsToCsv(sorted)); toast("Прайс-лист выгружен"); }} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint sm:px-3.5"><IcDownload size={15} /> <span className="hidden md:inline">Экспорт</span></button>
-          <button onClick={() => { downloadText("price-template.csv", productsToCsv([])); toast("Шаблон загрузки продуктов скачан"); }} title="Пустой CSV-шаблон: название, единица, цена и категория" className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:text-cream sm:px-3.5"><IcDoc size={15} /> <span className="hidden md:inline">Шаблон</span></button>
-          <button onClick={() => setCategoriesOpen(true)} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:text-cream sm:px-3.5"><IcPencil size={15} /> <span className="hidden md:inline">Категории</span></button>
+          <button onClick={() => fileRef.current?.click()} disabled={importing} aria-label={importing ? "Импорт выполняется" : "Импорт CSV/XLSX"} className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint disabled:opacity-50 sm:px-3.5"><IcUpload size={15} /> <span className="hidden sm:inline">{importing ? "Читаем…" : "Импорт CSV/XLSX"}</span></button>
+          <button onClick={() => { downloadText("price-list.csv", productsToCsv(sorted)); toast("Прайс-лист выгружен"); }} aria-label="Экспортировать прайс-лист" className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:border-mint/50 hover:text-mint sm:px-3.5"><IcDownload size={15} /> <span className="hidden sm:inline">Экспорт</span></button>
+          <button onClick={() => { downloadText("price-template.csv", productsToCsv([])); toast("Шаблон загрузки продуктов скачан"); }} title="Пустой CSV-шаблон: название, единица, цена и категория" aria-label="Скачать CSV-шаблон" className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:text-cream sm:px-3.5"><IcDoc size={15} /> <span className="hidden sm:inline">Шаблон</span></button>
+          <button onClick={() => setCategoriesOpen(true)} aria-label="Настроить категории продуктов" className="tap flex items-center gap-2 rounded-[12px] border border-line bg-pine-800/80 px-2.5 py-2.5 text-[12px] font-semibold text-sage hover:text-cream sm:px-3.5"><IcPencil size={15} /> <span className="hidden sm:inline">Категории</span></button>
           <button onClick={() => { setEditing(null); setSheetOpen(true); }} className="tap flex items-center gap-2 rounded-[12px] bg-gradient-to-br from-saffron to-amber-500 px-4 py-2.5 font-display text-[12px] font-bold text-pine-950 shadow-lg shadow-saffron/20 hover:scale-105"><IcPlus size={16} /> Продукт</button>
         </div>
       </header>
@@ -93,7 +93,7 @@ export function ProductsScreen() {
                         <p className="mt-0.5 text-[10.5px] text-sage">{p.unit}{productPackageContentLabel(p, 1) ? ` · содержимое ${productPackageContentLabel(p, 1)} в ${p.unit}` : ""} · {fmtDateShort(p.updatedAt)}</p>
                       </div>
                       <p className="whitespace-nowrap font-display text-[13.5px] font-bold text-saffron">{fmtMoney(p.price)}</p>
-                      <div className="shrink-0 opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                      <div className="shrink-0 opacity-80 sm:opacity-40 sm:group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                         <DangerConfirm onConfirm={() => { deleteProduct(p.id); toast("Продукт удалён", "del"); }} />
                       </div>
                     </div>

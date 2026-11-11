@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Tab } from "./types";
 import { StoreProvider, useStore } from "./store";
 import { ToastProvider } from "./components/UI";
@@ -91,8 +91,14 @@ function Ambient() {
 function AppInner() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [eventId, setEventId] = useState<string | null>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
   const goTab = (t: Tab) => { setTab(t); setEventId(null); };
   const openEvent = (id: string) => { setTab("events"); setEventId(id); };
+  useEffect(() => {
+    mobileNavRef.current
+      ?.querySelector<HTMLButtonElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }, [tab]);
   return (
     <div className="min-h-dvh bg-pine-950">
       <Ambient />
@@ -115,8 +121,8 @@ function AppInner() {
           {tab === "requisites" && <RequisitesScreen />}
         </div>
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-gradient-to-t from-pine-950/98 to-pine-900/95 backdrop-blur-xl md:hidden">
-        <div className="grid grid-cols-7 px-0.5 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 sm:px-1">{NAV.map((n) => { const active = tab === n.id; return (<button key={n.id} onClick={() => goTab(n.id)} className="tap relative flex min-w-0 flex-col items-center gap-1 py-1.5"><span className={`absolute -top-1.5 h-1 w-7 rounded-full bg-saffron transition-all ${active ? "opacity-100 shadow-lg shadow-saffron/50" : "opacity-0"}`} /><n.Icon size={18} className={`transition-all ${active ? "text-saffron scale-110" : "text-sage"}`} /><span className={`max-w-full truncate text-[8px] font-bold tracking-tight transition-all sm:text-[8.5px] ${active ? "text-saffron" : "text-sage"}`}>{n.short}</span></button>); })}</div>
+      <nav ref={mobileNavRef} aria-label="Основная навигация" className="no-scrollbar fixed inset-x-0 bottom-0 z-40 overflow-x-auto border-t border-line bg-gradient-to-t from-pine-950/98 to-pine-900/95 backdrop-blur-xl md:hidden">
+        <div className="flex min-h-[56px] w-max min-w-full pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5">{NAV.map((n) => { const active = tab === n.id; return (<button key={n.id} aria-current={active ? "page" : undefined} onClick={() => goTab(n.id)} className="tap relative flex min-w-[60px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5"><span className={`absolute -top-1.5 h-1 w-7 rounded-full bg-saffron transition-all ${active ? "opacity-100 shadow-lg shadow-saffron/50" : "opacity-0"}`} /><n.Icon size={19} className={`transition-all ${active ? "scale-110 text-saffron" : "text-sage"}`} /><span className={`whitespace-nowrap text-[9.5px] font-bold tracking-tight transition-all ${active ? "text-saffron" : "text-sage"}`}>{n.short}</span></button>); })}</div>
       </nav>
     </div>
   );
